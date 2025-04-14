@@ -4,6 +4,7 @@ In the following link you can find the pretrained weights for DeepLab.
 
 **DeepLab petrained weights**: https://drive.google.com/file/d/1ZX0UCXvJwqd2uBGCX7LI2n-DfMg3t74v/view?usp=sharing
 
+**Link utili** : https://www.kaggle.com/code/shravankumar147/cityscapes-model-training
 
 ## Datasets
 
