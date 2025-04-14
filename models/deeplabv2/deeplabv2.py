@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import gdown
 
 affine_par = True
 
@@ -171,8 +172,18 @@ class ResNetMulti(nn.Module):
                 {'params': self.get_10x_lr_params(), 'lr': 10 * lr}]
 
 
-def get_deeplab_v2(num_classes=19, pretrain=True, pretrain_model_path='deepLab_resnet_pretrained_imagenet.pth'):
+def get_deeplab_v2(num_classes=19, pretrain=True):
     model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
+    # Google drive 
+
+    file_od = "1ZX0UCXvJwqd2uBGCX7LI2n-DfMg3t74v"
+    download_url = f"https://drive.google.com/uc?id={file_id}"
+
+    # model path
+    pretrain_model_path = "deepLab_resenet_petrained_imagenet.pth"
+
+    # download file 
+    gdown.download(download_url, pretrain_model_path, quiet = False)
 
     # Pretraining loading
     if pretrain:
