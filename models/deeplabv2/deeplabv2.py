@@ -141,7 +141,7 @@ class ResNetMulti(nn.Module):
             {'params': self.get_10x_lr_params(), 'lr': 10 * lr}
         ]
 
-
+#FATTO DA NOI CAPIRE
 def get_deeplab_v2(num_classes=19, pretrain=True):
     model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
 
