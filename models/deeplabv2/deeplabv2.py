@@ -141,7 +141,8 @@ class ResNetMulti(nn.Module):
             {'params': self.get_10x_lr_params(), 'lr': 10 * lr}
         ]
 
-#FATTO DA NOI CAPIRE
+#FATTO DA NOI CAPIRE - è PER Backbone: R101 (pre-trained on ImageNet) [2]
+#VEDERE SE FATTO GIUSTO
 def get_deeplab_v2(num_classes=19, pretrain=True):
     model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
 
