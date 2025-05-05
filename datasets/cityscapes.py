@@ -10,6 +10,8 @@ from torchvision.transforms import ToTensor, Resize, InterpolationMode, PILToTen
 import pandas as pd
 import csv
 
+#FATTO TUTTO DA NOI CAPIRE
+
 # ------------------------------
 # Dataset Class
 # ------------------------------
@@ -96,6 +98,8 @@ else:
 # ------------------------------
 # Trasformazioni
 # ------------------------------
+
+# VALUTARE SE EFFETTUARE ALTRE TRASFORMAZIONI
 transform = {
     'image': transforms.Compose([
         Resize((128, 256)),
