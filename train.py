@@ -1,14 +1,19 @@
 import os
 import zipfile
 import shutil
+import gc
 from glob import glob
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
+from torch.amp import autocast, GradScaler  # ✅ Mixed precision
+
 
 from models.deeplabv2.deeplabv2 import get_deeplab_v2
 import datasets.cityscapes as cityscapes
+
+scaler = GradScaler()  # ✅ inizializza scaler globale
 
 def train(epoch, model, train_loader, criterion, optimizer, device):
     model.train()
@@ -17,17 +22,24 @@ def train(epoch, model, train_loader, criterion, optimizer, device):
     for inputs, targets in train_loader:
         inputs, targets = inputs.to(device), targets.to(device)
 
-        outputs = model(inputs)
-        loss = criterion(outputs[0], targets.squeeze(1).long())
-
         optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+
+        with autocast('cuda'):  # ✅ mixed precision
+            outputs = model(inputs)
+            loss = criterion(outputs[0], targets.squeeze(1).long())
+
+        scaler.scale(loss).backward()
+        scaler.step(optimizer)
+        scaler.update()
 
         running_loss += loss.item()
         _, predicted = torch.max(outputs[0], 1)
         correct += (predicted == targets.squeeze(1)).sum().item()
         total += torch.numel(targets.squeeze(1))
+
+        # ✅ Rimosso torch.cuda.empty_cache() qui
+        del inputs, targets, outputs, predicted, loss
+        gc.collect()
 
     acc = 100. * correct / total
     print(f'Train Epoch {epoch} - Loss: {running_loss / len(train_loader):.4f} - Acc: {acc:.2f}%')
@@ -48,6 +60,9 @@ def validate(model, val_loader, criterion, device):
             _, predicted = torch.max(outputs, 1)
             correct += (predicted == targets.squeeze(1)).sum().item()
             total += torch.numel(targets.squeeze(1))
+
+            del inputs, targets, outputs, predicted, loss
+            gc.collect()
 
     acc = 100. * correct / total
     print(f'Validation - Loss: {val_loss / len(val_loader):.4f} - Acc: {acc:.2f}%')
@@ -76,14 +91,8 @@ if __name__ == "__main__":
     else:
         print("✅ Dataset già presente.")
 
-    # Trova immagini e maschere
     images_dir = find_folder(base_extract_path, 'images')
     masks_dir = find_folder(base_extract_path, 'gtFine')
-    print("Sotto-cartelle in images_dir:")
-    print(os.listdir(base_extract_path))
-
-    print("Sotto-cartelle in masks_dir:")
-    print(os.listdir(masks_dir))
 
     if not images_dir or not masks_dir:
         raise RuntimeError("❌ 'images' o 'gtFine' non trovati dopo l’estrazione!")
@@ -97,11 +106,9 @@ if __name__ == "__main__":
     train_csv = 'train_annotations.csv'
     val_csv = 'val_annotations.csv'
 
-    # Crea CSV
-    cityscapes.create_cityscapes_csv(train_images_dir, train_masks_dir, train_csv, base_path)
-    cityscapes.create_cityscapes_csv(val_images_dir, val_masks_dir, val_csv, base_path)
+    #cityscapes.create_cityscapes_csv(train_images_dir, train_masks_dir, train_csv, base_path)
+    #cityscapes.create_cityscapes_csv(val_images_dir, val_masks_dir, val_csv, base_path)
 
-    # Dataset & transforms
     train_dataset = cityscapes.CityScapes(
         annotations_file=train_csv,
         root_dir=base_path,
@@ -119,20 +126,18 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs('checkpoints', exist_ok=True)
 
-    img, mask = train_dataset[0]
-    print("Image shape:", img.shape)
-    print("Mask shape:", mask.shape)
-
-    num_epochs = 20
-    learning_rates = [0.01]
+    num_epochs = 1
+    learning_rates = [0.000025]
     batch_sizes = [4]
 
     for lr in learning_rates:
         for bs in batch_sizes:
             print(f"\n>>> Inizio training con lr={lr}, batch_size={bs}")
 
-            train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True, num_workers=2)
-            val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False, num_workers=2)
+            train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True,
+                                      num_workers=2, pin_memory=True)  # ✅ migliorato
+            val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False,
+                                    num_workers=2, pin_memory=True)
 
             model = get_deeplab_v2(num_classes=19).to(device)
             criterion = nn.CrossEntropyLoss(ignore_index=255)
