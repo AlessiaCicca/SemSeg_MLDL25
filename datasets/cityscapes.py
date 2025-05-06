@@ -102,17 +102,17 @@ else:
 # VALUTARE SE EFFETTUARE ALTRE TRASFORMAZIONI
 transform = {
     'image': transforms.Compose([
-        Resize((128, 256)),
+        Resize((512, 1024)),
         ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406],
                              std=[0.229, 0.224, 0.225])
     ]),
     'mask': transforms.Compose([
-        Resize((128, 256), interpolation=InterpolationMode.NEAREST),
+        Resize((512, 1024), interpolation=InterpolationMode.NEAREST),
         PILToTensor()
     ])
 }
-
+'''
 # ------------------------------
 # Crea CSV con immagini e maschere
 # ------------------------------
@@ -147,8 +147,11 @@ def create_cityscapes_csv(images_dir, masks_dir, output_csv, root_dir):
 
     print(f"Creato CSV con {len(data)} coppie: {output_csv}")
 
+
+
 # ------------------------------
 # Esegui creazione CSV
 # ------------------------------
 csv_output = os.path.join(extract_dir, 'annotations.csv')
 create_cityscapes_csv(images_dir, gtfine_dir, csv_output, extract_dir)
+'''
