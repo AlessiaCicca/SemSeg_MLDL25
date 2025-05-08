@@ -1,10 +1,19 @@
+PARTE CLONATA DAL REPOSITORY ORIGINALE
+
+
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-import gdown
-import os
+
 
 affine_par = True
+
+
+IL MODELLO VIENE CREATO CON model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes) IN get_deeplab_v2 CHE VIENE POI CHIAMATO NEL TRAIN. (self, block, layers, num_classes, multi_level=False),
+QUINDI GLI SI STA DICENDO CHE self._make_layer() ANDRA' A GENERARE I LAYER 1,2,3,4 CHE SONO DEI BOTTLENECK CON UN NUMERO DI FEATUREMAP UGUALE planes E UN NUMERO DI BLOCCHI DEFINITO IN  [3, 4, 23, 3]. Il Bottleneck viene “attaccato” alla ResNet nel momento in cui la ResNetMulti costruisce i layer layer1–layer4 usando _make_layer(...), e dipende dal parametro block che gli passi (in questo caso proprio Bottleneck).
+
+
+A Bottleneck Residual Block is a residual block that utilises 1x1 convolutions to create a bottleneck. The use of a bottleneck reduces the number of parameters and matrix multiplications. The idea is to make residual blocks as thin as possible to increase depth and have less parameters. They were introduced as part of the ResNet architecture, and are used as part of deeper ResNets such as ResNet-50 and ResNet-101. COME DA INDICAZIONE DI PROGETTO, NEL NOSTRO CASO USIAMO R101, PER QUESTO VIENE IMPLEMENTATA LA CLASSE BOTTLENECK CHE E' COMPOSTA DA CONVOLUZIONI, BATCH NORM E RELU. NB. ANCHE IL BOTTLENECK è PRETRAINATO SU IMAGENET
+
 
 
 class Bottleneck(nn.Module):
@@ -48,6 +57,9 @@ class Bottleneck(nn.Module):
         return out
 
 
+È UN MODULO FINALE DI CLASSIFICAZIONE CHE PRENDE LE FEATURE ESTRATTE DALLA RESNET E PRODUCE UN OUTPUT PER OGNI CLASSSE, A LIVELLO DI PIXEL. NON E' 
+PREADDESTRATO E VA A RAPPRESENTARE IL LAYER FINALE DEL RESNET
+
 class ClassifierModule(nn.Module):
     def __init__(self, inplanes, dilation_series, padding_series, num_classes):
         super(ClassifierModule, self).__init__()
@@ -66,6 +78,7 @@ class ClassifierModule(nn.Module):
         for i in range(1, len(self.conv2d_list)):
             out += self.conv2d_list[i](x)
         return out
+
 
 
 class ResNetMulti(nn.Module):
@@ -87,7 +100,7 @@ class ResNetMulti(nn.Module):
         self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilation=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilation=4)
 
-        self.layer6 = ClassifierModule(2048, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)
+        self.layer6 = ClassifierModule(2048, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)   //CI ATTACCO IL CLASSIFIER FINALE
 
     def _make_layer(self, block, planes, blocks, stride=1, dilation=1):
         downsample = None
@@ -125,6 +138,11 @@ class ResNetMulti(nn.Module):
         else:
             return x
 
+LE PROSSIME FUNZIONI VANNO A INPOSTARE IL LEARNING RATE PER I DIVERSI LAYER, IMPOSTANDO
+CHE IL LAYER FINALE AVRA' UN LEARNIGN RATE CHE è 10 VOLTE QUELLO BASE PERCHE' NON ESSENDO PRE-ADDESTRATO DEVE IMPARARE DA ZERO. I DUE GET SONO UNITI IN optim_parameters CHE VIENE POSI CHIAMATO 
+NEL TRAIN
+
+
     def get_1x_lr_params_no_scale(self):
         for module in [self.conv1, self.bn1, self.layer1, self.layer2, self.layer3, self.layer4]:
             for m in module.modules():
@@ -141,19 +159,44 @@ class ResNetMulti(nn.Module):
             {'params': self.get_10x_lr_params(), 'lr': 10 * lr}
         ]
 
+AGGIUNTA DA NOI:
+
+import torch.nn.functional as F
+import gdown
+import os
+
+
+
+def get_deeplab_v2(num_classes=19, pretrain=True, pretrain_model_path='DeepLab_resnet_pretrained_imagenet.pth'):
+    model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
+
+    # Pretraining loading
+    if pretrain:
+        print('Deeplab pretraining loading...')
+        saved_state_dict = torch.load(pretrain_model_path)
+
+        new_params = model.state_dict().copy()
+        for i in saved_state_dict:
+            i_parts = i.split('.')
+            new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
+        model.load_state_dict(new_params, strict=False)
+
+    return model
+
 #FATTO DA NOI CAPIRE - è PER Backbone: R101 (pre-trained on ImageNet) [2]
 #VEDERE SE FATTO GIUSTO
 def get_deeplab_v2(num_classes=19, pretrain=True):
     model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
 
-    pretrain_model_path = "deepLab_resenet_petrained_imagenet.pth"
-    file_id = "1ZX0UCXvJwqd2uBGCX7LI2n-DfMg3t74v"
-    download_url = f"https://drive.google.com/uc?id={file_id}"
+    pretrain_model_path = "deepLab_resenet_petrained_imagenet.pth"     //AGGIUNTA
+    file_id = "1ZX0UCXvJwqd2uBGCX7LI2n-DfMg3t74v"                      //AGGIUNTA
+    download_url = f"https://drive.google.com/uc?id={file_id}"         //AGGIUNTA
 
     if pretrain and not os.path.exists(pretrain_model_path):
-        print(">>> Downloading pretrained model...")
-        gdown.download(download_url, pretrain_model_path, quiet=False)
+        print(">>> Downloading pretrained model...")          
+        gdown.download(download_url, pretrain_model_path, quiet=False)    //AGGIUNTA
 
+    //MODIFICHE DELL'ORIGINALE
     if pretrain:
         print(">>> Loading pretrained weights...")
         saved_state_dict = torch.load(pretrain_model_path, map_location='cpu')
