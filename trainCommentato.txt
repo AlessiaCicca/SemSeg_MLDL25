@@ -13,18 +13,20 @@ from torch.amp import autocast, GradScaler  # ✅ Mixed precision
 from models.deeplabv2.deeplabv2 import get_deeplab_v2
 import datasets.cityscapes as cityscapes
 
-scaler = GradScaler()  # ✅ inizializza scaler globale
+scaler = GradScaler()  # ✅ inizializza scaler globale               PER OTTIMIZZAZIONE
+
+TRAIN E VAL COMMENTATI PER BENE NEL PDF
 
 def train(epoch, model, train_loader, criterion, optimizer, device):
     model.train()
-    running_loss, correct, total = 0.0, 0, 0
+    running_loss, correct, total = 0.0, 0, 0  
 
     for inputs, targets in train_loader:
         inputs, targets = inputs.to(device), targets.to(device)
 
         optimizer.zero_grad()
 
-        with autocast('cuda'):  # ✅ mixed precision
+        with autocast('cuda'):  # ✅ mixed precision         PER OTTIMIZZAZIONE
             outputs = model(inputs)
             loss = criterion(outputs[0], targets.squeeze(1).long())
 
@@ -69,6 +71,7 @@ def validate(model, val_loader, criterion, device):
     return acc
 
 
+SEMPRE PER TROVARE LA CARTELLA... DA CANCELLARE SE SI FA IN LOCALE
 def find_folder(start_path, folder_name):
     for root, dirs, _ in os.walk(start_path):
         if folder_name in dirs:
@@ -76,8 +79,10 @@ def find_folder(start_path, folder_name):
     return None
 
 
+
 if __name__ == "__main__":
     print(">>> Avvio training...")
+
 
     zip_path = 'cityscapes_dataset.zip'
     base_extract_path = '/tmp/Cityscapes'
@@ -97,6 +102,9 @@ if __name__ == "__main__":
     if not images_dir or not masks_dir:
         raise RuntimeError("❌ 'images' o 'gtFine' non trovati dopo l’estrazione!")
 
+
+ Prepara i percorsi per train e validation
+
     train_images_dir = os.path.join(images_dir, 'train')
     val_images_dir = os.path.join(images_dir, 'val')
     train_masks_dir = os.path.join(masks_dir, 'train')
@@ -106,8 +114,11 @@ if __name__ == "__main__":
     train_csv = 'train_annotations.csv'
     val_csv = 'val_annotations.csv'
 
+CREA I FILE CSV
     #cityscapes.create_cityscapes_csv(train_images_dir, train_masks_dir, train_csv, base_path)
     #cityscapes.create_cityscapes_csv(val_images_dir, val_masks_dir, val_csv, base_path)
+
+GENERA I DUE DATASET
 
     train_dataset = cityscapes.CityScapes(
         annotations_file=train_csv,
@@ -123,6 +134,8 @@ if __name__ == "__main__":
         target_transform=cityscapes.transform['mask']
     )
 
+fa una verifica automatica per decidere se usare la GPU (tramite CUDA) o la CPU.
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs('checkpoints', exist_ok=True)
 
@@ -135,7 +148,7 @@ if __name__ == "__main__":
             print(f"\n>>> Inizio training con lr={lr}, batch_size={bs}")
 
             train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True,
-                                      num_workers=2, pin_memory=True)  # ✅ migliorato
+                                      num_workers=2, pin_memory=True)  #PER OTTIMIZZAZIONE
             val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False,
                                     num_workers=2, pin_memory=True)
 
