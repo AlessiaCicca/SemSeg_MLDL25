@@ -139,8 +139,7 @@ class ResNetMulti(nn.Module):
             return x
 
 LE PROSSIME FUNZIONI VANNO A INPOSTARE IL LEARNING RATE PER I DIVERSI LAYER, IMPOSTANDO
-CHE IL LAYER FINALE AVRA' UN LEARNIGN RATE CHE è 10 VOLTE QUELLO BASE PERCHE' NON ESSENDO PRE-ADDESTRATO DEVE IMPARARE DA ZERO. I DUE GET SONO UNITI IN optim_parameters CHE VIENE POSI CHIAMATO 
-NEL TRAIN
+CHE IL LAYER FINALE AVRA' UN LEARNIGN RATE CHE è 10 VOLTE QUELLO BASE PERCHE' NON ESSENDO PRE-ADDESTRATO DEVE IMPARARE DA ZERO. I DUE GET SONO UNITI IN optim_parameters CHE VIENE POI CHIAMATO con optimizer = torch.optim.SGD(model.optim_parameters(lr), momentum=0.9, weight_decay=1e-4) NEL TRAIN
 
 
     def get_1x_lr_params_no_scale(self):
@@ -167,45 +166,47 @@ import os
 
 
 
-def get_deeplab_v2(num_classes=19, pretrain=True, pretrain_model_path='DeepLab_resnet_pretrained_imagenet.pth'):
-    model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
 
-    # Pretraining loading
-    if pretrain:
-        print('Deeplab pretraining loading...')
-        saved_state_dict = torch.load(pretrain_model_path)
+def get_deeplab_v2(num_classes=19, pretrain=True):  
+    model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)   //ISTANZIA IL MODELLO
 
-        new_params = model.state_dict().copy()
-        for i in saved_state_dict:
-            i_parts = i.split('.')
-            new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
-        model.load_state_dict(new_params, strict=False)
 
-    return model
-
-#FATTO DA NOI CAPIRE - è PER Backbone: R101 (pre-trained on ImageNet) [2]
-#VEDERE SE FATTO GIUSTO
-def get_deeplab_v2(num_classes=19, pretrain=True):
-    model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
-
-    pretrain_model_path = "deepLab_resenet_petrained_imagenet.pth"     //AGGIUNTA
-    file_id = "1ZX0UCXvJwqd2uBGCX7LI2n-DfMg3t74v"                      //AGGIUNTA
-    download_url = f"https://drive.google.com/uc?id={file_id}"         //AGGIUNTA
+    BLOCCO DI CODICE PER SCARICARE I PESI DEL MODELLO PRETRAINATO
+    pretrain_model_path = "deepLab_resenet_petrained_imagenet.pth"     
+    file_id = "1ZX0UCXvJwqd2uBGCX7LI2n-DfMg3t74v"                      
+    download_url = f"https://drive.google.com/uc?id={file_id}"         
 
     if pretrain and not os.path.exists(pretrain_model_path):
         print(">>> Downloading pretrained model...")          
-        gdown.download(download_url, pretrain_model_path, quiet=False)    //AGGIUNTA
+        gdown.download(download_url, pretrain_model_path, quiet=False)    
 
     //MODIFICHE DELL'ORIGINALE
     if pretrain:
         print(">>> Loading pretrained weights...")
-        saved_state_dict = torch.load(pretrain_model_path, map_location='cpu')
-        new_params = model.state_dict()
+        saved_state_dict = torch.load(pretrain_model_path, map_location='cpu')  //Carica i pesi salvati da un modello pre-addestrat
+        new_params = model.state_dict().copy()
+
+
+PROF:
+       for i in saved_state_dict:
+            i_parts = i.split('.')
+            new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
+NOI:
+
         for k, v in saved_state_dict.items():
             if k.startswith('module.'):
                 k = k[7:]  # remove 'module.' if trained with DataParallel
             if k in new_params and new_params[k].size() == v.size():
                 new_params[k] = v
-        model.load_state_dict(new_params, strict=False)
+
+        model.load_state_dict(new_params, strict=False) //Caricamento effettivo dei pesi
 
     return model
+
+
+QUESTA FUNZIONE RITORNA IL MODELLO E DOVREBBE ESSERE USATA NEL TRAIN PER AVERE IL MODELLO PRETRAINATO:
+resnet = get_deeplab_v2(num_classes=19, pretrain=True)
+
+E NON 
+resnet = ResNetMulti(Bottleneck, [3, 4, 6, 3], num_classes=19).cpu()
+
