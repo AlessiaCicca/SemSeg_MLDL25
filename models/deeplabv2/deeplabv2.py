@@ -10,8 +10,8 @@ affine_par = True
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def _init_(self, inplanes, planes, stride=1, dilation=1, downsample=None):
-        super(Bottleneck, self)._init_()
+    def __init__(self, inplanes, planes, stride=1, dilation=1, downsample=None):
+        super(Bottleneck, self).__init__()
         self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, stride=stride, bias=False)
         self.bn1 = nn.BatchNorm2d(planes, affine=affine_par)
         for p in self.bn1.parameters():
@@ -49,8 +49,8 @@ class Bottleneck(nn.Module):
 
 
 class ClassifierModule(nn.Module):
-    def _init_(self, inplanes, dilation_series, padding_series, num_classes):
-        super(ClassifierModule, self)._init_()
+    def __init__(self, inplanes, dilation_series, padding_series, num_classes):
+        super(ClassifierModule, self).__init__()
         self.conv2d_list = nn.ModuleList()
         for dilation, padding in zip(dilation_series, padding_series):
             self.conv2d_list.append(
@@ -69,8 +69,8 @@ class ClassifierModule(nn.Module):
 
 
 class ResNetMulti(nn.Module):
-    def _init_(self, block, layers, num_classes, multi_level=False):
-        super(ResNetMulti, self)._init_()
+    def __init__(self, block, layers, num_classes, multi_level=False):
+        super(ResNetMulti, self).__init__()
         self.inplanes = 64
         self.multi_level = multi_level
 
