@@ -80,16 +80,16 @@ if __name__ == "__main__":
     print(">>> Avvio training...")
 
     zip_path = 'cityscapes_dataset.zip'
-    base_extract_path = '/tmp/Cityscapes'
+    base_extract_path = './Cityscapes'
 
-    if not os.path.exists(base_extract_path):
+    """if not os.path.exists(base_extract_path):
         print("📦 Dataset non trovato o incompleto, lo scarico...")
         os.system(f"gdown https://drive.google.com/uc?id=1Qb4UrNsjvlU-wEsR9d7rckB0YS_LXgb2 -O {zip_path}")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(base_extract_path)
         print("✅ Estrazione completata.")
     else:
-        print("✅ Dataset già presente.")
+        print("✅ Dataset già presente.")"""
 
     images_dir = find_folder(base_extract_path, 'images')
     masks_dir = find_folder(base_extract_path, 'gtFine')
@@ -106,8 +106,8 @@ if __name__ == "__main__":
     train_csv = 'train_annotations.csv'
     val_csv = 'val_annotations.csv'
 
-    #cityscapes.create_cityscapes_csv(train_images_dir, train_masks_dir, train_csv, base_path)
-    #cityscapes.create_cityscapes_csv(val_images_dir, val_masks_dir, val_csv, base_path)
+    cityscapes.create_cityscapes_csv(train_images_dir, train_masks_dir, train_csv, base_path)
+    cityscapes.create_cityscapes_csv(val_images_dir, val_masks_dir, val_csv, base_path)
 
     train_dataset = cityscapes.CityScapes(
         annotations_file=train_csv,
@@ -126,9 +126,9 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs('checkpoints', exist_ok=True)
 
-    num_epochs = 1
-    learning_rates = [0.000025]
-    batch_sizes = [4]
+    num_epochs = 50
+    learning_rates = [0.000025, 0.001]
+    batch_sizes = [1, 4, 8]
 
     for lr in learning_rates:
         for bs in batch_sizes:
@@ -141,7 +141,7 @@ if __name__ == "__main__":
 
             model = get_deeplab_v2(num_classes=19).to(device)
             criterion = nn.CrossEntropyLoss(ignore_index=255)
-            optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+            optimizer = optim.SGD(model.optim_parameters(lr = lr), lr=lr, momentum=0.9, weight_decay=5e-4)
 
             best_acc = 0
 

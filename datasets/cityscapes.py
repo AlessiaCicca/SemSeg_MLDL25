@@ -47,7 +47,7 @@ class CityScapes(Dataset):
 # ------------------------------
 download_url = 'https://drive.google.com/uc?id=1Qb4UrNsjvlU-wEsR9d7rckB0YS_LXgb2'
 output_zip = 'cityscapes_dataset.zip'
-extract_dir = '/tmp/Cityscapes'
+extract_dir = './Cityscapes'
 
 # ------------------------------
 # Funzione per cercare cartelle ricorsivamente
@@ -80,7 +80,7 @@ else:
 # ------------------------------
 # Verifica cartelle estratte
 # ------------------------------
-extract_dir = '/tmp/Cityscapes'
+extract_dir = './Cityscapes'
 nested_path = os.path.join(extract_dir, 'Cityscapes', 'Cityscapes')
 if os.path.exists(nested_path):
     extract_dir = nested_path  # entra nel livello giusto
@@ -112,10 +112,7 @@ transform = {
         PILToTensor()
     ])
 }
-'''
-# ------------------------------
-# Crea CSV con immagini e maschere
-# ------------------------------
+
 def create_cityscapes_csv(images_dir, masks_dir, output_csv, root_dir):
     image_files = glob(os.path.join(images_dir, '*', '*_leftImg8bit.png'), recursive=True)
     data = []
@@ -149,9 +146,3 @@ def create_cityscapes_csv(images_dir, masks_dir, output_csv, root_dir):
 
 
 
-# ------------------------------
-# Esegui creazione CSV
-# ------------------------------
-csv_output = os.path.join(extract_dir, 'annotations.csv')
-create_cityscapes_csv(images_dir, gtfine_dir, csv_output, extract_dir)
-'''

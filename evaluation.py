@@ -68,18 +68,18 @@ def evaluate_model(model, outputs, masks, input_size=(224, 224), iterations=1000
     flops = FlopCountAnalysis(model, image_flop)
     print(flop_count_table(flops))
 
-    # Parametri
+  
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
 
 
-if __name__ == "__main__":
-    # ✅ Device
+if __name__ == "_main_":
+    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-    # ✅ Dataset
+   
     val_csv = '/content/SemSeg_MLDL25/val_annotations.csv'
     base_path = '/tmp/Cityscapes/Cityscapes/Cityspaces'
 
@@ -92,16 +92,16 @@ if __name__ == "__main__":
 
     val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2)
 
-    # ✅ Modello
+   
     model = get_deeplab_v2(num_classes=19).to(device)
     model.load_state_dict(torch.load('checkpoints/best_model.pth', map_location=device))
 
-    # ✅ Un batch per la valutazione ???? CONTROLLARE
+   
     model.eval()
     with torch.no_grad():
-        inputs, targets = next(iter(val_loader))
-        inputs, targets = inputs.to(device), targets.to(device)
-        outputs = model(inputs)
+        for inputs, targets in val_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
 
-    # ✅ Evaluation
+   
     evaluate_model(model, outputs, targets, input_size=(512, 1024), iterations=100, device=device)
