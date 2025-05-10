@@ -1,107 +1,165 @@
-# MEAN INTERSECTION OVER UNION
-# The Intersection over Union (IoU) metric, also referred to as the Jaccard index,
-# quantifies the percent overlap between the target mask and the prediction output.
-
 import torch
-import numpy as np
-import time
-from torch.utils.data import DataLoader
-from models.deeplabv2.deeplabv2 import get_deeplab_v2
-import datasets.cityscapes as cityscapes
-from fvcore.nn import FlopCountAnalysis, flop_count_table
+import torch.nn as nn
+import torch.nn.functional as F
+import gdown
+import os
+
+affine_par = True
 
 
-def calculate_iou(predicted_mask, target_mask):
-    intersection = np.logical_and(predicted_mask, target_mask).sum()
-    union = np.logical_or(predicted_mask, target_mask).sum()
-    iou = intersection / (union + 1e-10)
-    return iou
+class Bottleneck(nn.Module):
+    expansion = 4
+
+    def _init_(self, inplanes, planes, stride=1, dilation=1, downsample=None):
+        super(Bottleneck, self)._init_()
+        self.conv1 = nn.Conv2d(inplanes, planes, kernel_size=1, stride=stride, bias=False)
+        self.bn1 = nn.BatchNorm2d(planes, affine=affine_par)
+        for p in self.bn1.parameters():
+            p.requires_grad = False
+
+        self.conv2 = nn.Conv2d(planes, planes, kernel_size=3, stride=1,
+                               padding=dilation, bias=False, dilation=dilation)
+        self.bn2 = nn.BatchNorm2d(planes, affine=affine_par)
+        for p in self.bn2.parameters():
+            p.requires_grad = False
+
+        self.conv3 = nn.Conv2d(planes, planes * 4, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(planes * 4, affine=affine_par)
+        for p in self.bn3.parameters():
+            p.requires_grad = False
+
+        self.relu = nn.ReLU(inplace=True)
+        self.downsample = downsample
+        self.stride = stride
+
+    def forward(self, x):
+        residual = x
+
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.relu(self.bn2(self.conv2(out)))
+        out = self.bn3(self.conv3(out))
+
+        if self.downsample is not None:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+
+        return out
 
 
-def evaluate_model(model, outputs, masks, input_size=(224, 224), iterations=1000, device='cpu'):
-    print("\n=== MODEL EVALUATION ===")
-    model.eval()
-    model.to(device)
+class ClassifierModule(nn.Module):
+    def _init_(self, inplanes, dilation_series, padding_series, num_classes):
+        super(ClassifierModule, self)._init_()
+        self.conv2d_list = nn.ModuleList()
+        for dilation, padding in zip(dilation_series, padding_series):
+            self.conv2d_list.append(
+                nn.Conv2d(inplanes, num_classes, kernel_size=3, stride=1,
+                          padding=padding, dilation=dilation, bias=True)
+            )
 
-    outputs_np = outputs.cpu().detach().numpy()
-    masks_np = masks.cpu().detach().numpy()
+        for m in self.conv2d_list:
+            nn.init.normal_(m.weight, mean=0, std=0.01)
 
-    iou_scores = []
-    for i in range(len(outputs_np)):
-        predicted_mask = np.argmax(outputs_np[i], axis=0)
-        target_mask = masks_np[i, 0]
-        iou = calculate_iou(predicted_mask, target_mask)
-        iou_scores.append(iou)
-
-    mean_iou = np.mean(iou_scores)
-    print(f"Mean IoU: {mean_iou:.4f}")
-
-    # Latenza & FPS
-    height, width = input_size
-    image = torch.rand(1, 3, height, width).to(device)
-
-    latency = []
-    fps_list = []
-
-    for _ in range(iterations):
-        start = time.time()
-        with torch.no_grad():
-            _ = model(image)
-        end = time.time()
-
-        latency_i = end - start
-        latency.append(latency_i)
-        fps_list.append(1 / latency_i)
-
-    mean_latency = np.mean(latency) * 1000
-    std_latency = np.std(latency) * 1000
-    mean_fps = np.mean(fps_list)
-    std_fps = np.std(fps_list)
-
-    print(f"Mean Latency: {mean_latency:.2f} ms")
-    print(f"Std Latency: {std_latency:.2f} ms")
-    print(f"Mean FPS: {mean_fps:.2f}")
-    print(f"Std FPS: {std_fps:.2f}")
-
-    # FLOPs
-    image_flop = torch.zeros((1, 3, height, width)).to(device)
-    flops = FlopCountAnalysis(model, image_flop)
-    print(flop_count_table(flops))
-
-  
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print(f"Total parameters: {total_params:,}")
-    print(f"Trainable parameters: {trainable_params:,}")
+    def forward(self, x):
+        out = self.conv2d_list[0](x)
+        for i in range(1, len(self.conv2d_list)):
+            out += self.conv2d_list[i](x)
+        return out
 
 
-if _name_ == "_main_":
-    
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+class ResNetMulti(nn.Module):
+    def _init_(self, block, layers, num_classes, multi_level=False):
+        super(ResNetMulti, self)._init_()
+        self.inplanes = 64
+        self.multi_level = multi_level
 
-   
-    val_csv = '/content/SemSeg_MLDL25/val_annotations.csv'
-    base_path = '/tmp/Cityscapes/Cityscapes/Cityspaces'
+        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.bn1 = nn.BatchNorm2d(64, affine=affine_par)
+        for p in self.bn1.parameters():
+            p.requires_grad = False
 
-    val_dataset = cityscapes.CityScapes(
-        annotations_file=val_csv,
-        root_dir=base_path,
-        transform=cityscapes.transform['image'],
-        target_transform=cityscapes.transform['mask']
-    )
+        self.relu = nn.ReLU(inplace=True)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, ceil_mode=True)
 
-    val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2)
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilation=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilation=4)
 
-   
-    model = get_deeplab_v2(num_classes=19).to(device)
-    model.load_state_dict(torch.load('checkpoints/best_model.pth', map_location=device))
+        self.layer6 = ClassifierModule(2048, [6, 12, 18, 24], [6, 12, 18, 24], num_classes)
 
-   
-    model.eval()
-    with torch.no_grad():
-        for inputs, targets in val_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
+    def _make_layer(self, block, planes, blocks, stride=1, dilation=1):
+        downsample = None
+        if stride != 1 or self.inplanes != planes * block.expansion:
+            downsample = nn.Sequential(
+                nn.Conv2d(self.inplanes, planes * block.expansion,
+                          kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm2d(planes * block.expansion, affine=affine_par)
+            )
+            for p in downsample[1].parameters():
+                p.requires_grad = False
 
-   
-    evaluate_model(model, outputs, targets, input_size=(512, 1024), iterations=100, device=device)
+        layers = [block(self.inplanes, planes, stride, dilation=dilation, downsample=downsample)]
+        self.inplanes = planes * block.expansion
+        for _ in range(1, blocks):
+            layers.append(block(self.inplanes, planes, dilation=dilation))
+
+        return nn.Sequential(*layers)
+
+    def forward(self, x):
+        H, W = x.size(2), x.size(3)
+
+        x = self.relu(self.bn1(self.conv1(x)))
+        x = self.maxpool(x)
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.layer6(x)
+
+        x = F.interpolate(x, size=(H, W), mode='bilinear', align_corners=True)
+
+        if self.training:
+            return x, None, None
+        else:
+            return x
+
+    def get_1x_lr_params_no_scale(self):
+        for module in [self.conv1, self.bn1, self.layer1, self.layer2, self.layer3, self.layer4]:
+            for m in module.modules():
+                for p in m.parameters():
+                    if p.requires_grad:
+                        yield p
+
+    def get_10x_lr_params(self):
+        return self.layer6.parameters()
+
+    def optim_parameters(self, lr):
+        return [
+            {'params': self.get_1x_lr_params_no_scale(), 'lr': lr},
+            {'params': self.get_10x_lr_params(), 'lr': 10 * lr}
+        ]
+
+def get_deeplab_v2(num_classes=19, pretrain=True):
+    model = ResNetMulti(Bottleneck, [3, 4, 23, 3], num_classes)
+
+    pretrain_model_path = "deepLab_resenet_petrained_imagenet.pth"
+    file_id = "1ZX0UCXvJwqd2uBGCX7LI2n-DfMg3t74v"
+    download_url = f"https://drive.google.com/uc?id={file_id}"
+
+    if pretrain and not os.path.exists(pretrain_model_path):
+        print(">>> Downloading pretrained model...")
+        gdown.download(download_url, pretrain_model_path, quiet=False)
+
+    if pretrain:
+        print('Deeplab pretraining loading...')
+        saved_state_dict = torch.load(pretrain_model_path)
+
+        new_params = model.state_dict().copy()
+        for i in saved_state_dict:
+            i_parts = i.split('.')
+            new_params['.'.join(i_parts[1:])] = saved_state_dict[i]
+        model.load_state_dict(new_params, strict=False)
+
+    return model
