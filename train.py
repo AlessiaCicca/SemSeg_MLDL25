@@ -7,13 +7,12 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-from torch.amp import autocast, GradScaler  # ✅ Mixed precision
-
+from torch.amp import autocast, GradScaler 
 
 from models.deeplabv2.deeplabv2 import get_deeplab_v2
 import datasets.cityscapes as cityscapes
 
-scaler = GradScaler()  # ✅ inizializza scaler globale
+scaler = GradScaler()  
 
 def train(epoch, model, train_loader, criterion, optimizer, device):
     model.train()
@@ -24,7 +23,7 @@ def train(epoch, model, train_loader, criterion, optimizer, device):
 
         optimizer.zero_grad()
 
-        with autocast('cuda'):  # ✅ mixed precision
+        with autocast('cuda'):
             outputs = model(inputs)
             loss = criterion(outputs[0], targets.squeeze(1).long())
 
@@ -37,7 +36,7 @@ def train(epoch, model, train_loader, criterion, optimizer, device):
         correct += (predicted == targets.squeeze(1)).sum().item()
         total += torch.numel(targets.squeeze(1))
 
-        # ✅ Rimosso torch.cuda.empty_cache() qui
+      
         del inputs, targets, outputs, predicted, loss
         gc.collect()
 
@@ -83,19 +82,19 @@ if __name__ == "__main__":
     base_extract_path = './Cityscapes'
 
     """if not os.path.exists(base_extract_path):
-        print("📦 Dataset non trovato o incompleto, lo scarico...")
+        print(" Dataset non trovato o incompleto, lo scarico...")
         os.system(f"gdown https://drive.google.com/uc?id=1Qb4UrNsjvlU-wEsR9d7rckB0YS_LXgb2 -O {zip_path}")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(base_extract_path)
-        print("✅ Estrazione completata.")
+        print(" Estrazione completata.")
     else:
-        print("✅ Dataset già presente.")"""
+        print(" Dataset già presente.")"""
 
     images_dir = find_folder(base_extract_path, 'images')
     masks_dir = find_folder(base_extract_path, 'gtFine')
 
     if not images_dir or not masks_dir:
-        raise RuntimeError("❌ 'images' o 'gtFine' non trovati dopo l’estrazione!")
+        raise RuntimeError("'images' o 'gtFine' non trovati dopo l’estrazione!")
 
     train_images_dir = os.path.join(images_dir, 'train')
     val_images_dir = os.path.join(images_dir, 'val')
@@ -129,13 +128,14 @@ if __name__ == "__main__":
     num_epochs = 50
     learning_rates = [0.000025, 0.001]
     batch_sizes = [1, 4, 8]
+ 
 
     for lr in learning_rates:
         for bs in batch_sizes:
             print(f"\n>>> Inizio training con lr={lr}, batch_size={bs}")
 
             train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True,
-                                      num_workers=2, pin_memory=True)  # ✅ migliorato
+                                      num_workers=2, pin_memory=True)  
             val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False,
                                     num_workers=2, pin_memory=True)
 
@@ -144,6 +144,8 @@ if __name__ == "__main__":
             optimizer = optim.SGD(model.optim_parameters(lr = lr), lr=lr, momentum=0.9, weight_decay=5e-4)
 
             best_acc = 0
+            best_lr=0
+            best_bs=0
 
             for epoch in range(num_epochs):
                 print(f"\nEpoch {epoch+1}/{num_epochs}")
@@ -152,12 +154,14 @@ if __name__ == "__main__":
 
                 if epoch % 10 == 0 or epoch == num_epochs - 1:
                     torch.save(model.state_dict(), f'checkpoints/checkpoint_epoch_{epoch}_lr{lr}_bs{bs}.pth')
-                    print(f"💾 Salvato checkpoint epoch {epoch}")
+                    print(f"Salvato checkpoint epoch {epoch}")
 
                 if val_acc > best_acc:
                     best_acc = val_acc
-                    torch.save(model.state_dict(), 'checkpoints/best_model.pth')
-                    print(f"🌟 Nuovo best model con acc: {best_acc:.2f}%")
+                    best_lr=lr
+                    best_bs=bs
+                    torch.save(model.state_dict(), 'checkpoints/best_model_lr{lr}_bs{bs}.pth')
+                    print(f"Nuovo best model con acc: {best_acc:.2f}%")
 
-            torch.save(model.state_dict(), f'checkpoints/final_model_lr{lr}_bs{bs}.pth')
-            print(f"✅ Fine training per lr={lr}, bs={bs} | Best Acc: {best_acc:.2f}%")
+
+            print(f" Fine training per lr={best_lr}, bs={best_bs} | Best Acc: {best_acc:.2f}%")
