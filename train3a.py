@@ -76,7 +76,7 @@ def find_folder(start_path, folder_name):
     return None
 
 
-if name == "main":
+if __name__ == "__main__":
     print(">>> Avvio training...")
 
     #zip_path = 'cityscapes_dataset.zip'
