@@ -129,7 +129,7 @@ if __name__ == "__main__":
     for lr in learning_rates:
         for bs in batch_sizes:
             print(f"\n>>> Inizio training con lr={lr}, batch_size={bs}")
-train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True,
+            train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True,
                                       num_workers=2, pin_memory=True) 
             val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False,
                                     num_workers=2, pin_memory=True)
