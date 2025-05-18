@@ -25,6 +25,8 @@ class GTA5(Dataset):
     def __len__(self):
         return len(self.img_labels)
 
+    '''
+
     def __getitem__(self, idx):
         img_path = os.path.join(self.root_dir, self.img_labels.iloc[idx, 0])
 
@@ -52,6 +54,24 @@ class GTA5(Dataset):
         mask = mask.long()
 
         return image, mask
+    '''
+    def __getitem__(self, idx):
+      img_path = os.path.join(self.root_dir, self.img_labels.iloc[idx, 0])
+
+      if self.mask_preprocessed_dir:
+          mask_filename = os.path.basename(self.img_labels.iloc[idx, 1])
+          mask_path = os.path.join(self.mask_preprocessed_dir, mask_filename)
+          mask = Image.open(mask_path)
+      else:
+          mask_path = os.path.join(self.root_dir, self.img_labels.iloc[idx, 1])
+          mask = Image.open(mask_path).convert("RGB")
+
+      image = Image.open(img_path).convert("RGB")
+
+      if self.transform:
+          image, mask = self.transform(image, mask)
+
+      return image, mask
 # ------------------------------
 # Scarica e prepara il dataset
 # ------------------------------
