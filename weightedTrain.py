@@ -20,7 +20,7 @@ from focalLoss import FocalLoss
 
 scaler = GradScaler()  
 
-'''
+
 def compute_class_weights(label_dir, num_classes=19):
     class_pixel_counts = np.zeros(num_classes, dtype=np.int64)
 
@@ -36,7 +36,7 @@ def compute_class_weights(label_dir, num_classes=19):
     # Formula del paper ENet (Weighted Cross Entropy)
     weights = 1.0 / (np.log(1.02 + class_freqs))
     return torch.FloatTensor(weights)
-'''
+
 def train(epoch, model, train_loader, criterion, optimizer, device):
     model.train()
     running_loss, correct, total = 0.0, 0, 0
@@ -189,12 +189,12 @@ if __name__ == "__main__":
                             num_workers=2, pin_memory=True)
 
     model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
-    #trainid_mask_dir = "./tmp/GTA5/GTA5/labels_trainid"
-    #class_weights = compute_class_weights(trainid_mask_dir).to(device)
+    trainid_mask_dir = "./tmp/GTA5/GTA5/labels_trainid"
+    class_weights = compute_class_weights(trainid_mask_dir).to(device)
 
     # Crea la loss pesata
-    #criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
-    criterion = nn.CrossEntropyLoss(ignore_index=255)
+    criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
+    #criterion = nn.CrossEntropyLoss(ignore_index=255)
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
 
     best_acc = 0
