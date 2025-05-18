@@ -116,9 +116,6 @@ def find_folder(start_path, folder_name):
 if __name__ == "__main__":
     print(">>> Avvio training...")
 
-    print("⚙️  Avvio preprocessamento delle maschere...")
-    os.system("python preprocess_mask.py")
-    print("✅ Preprocessamento completato.\n")
 
     base_extract_path = './tmp/GTA5'
     zip_path = 'gt5_dataset.zip'
@@ -144,7 +141,13 @@ if __name__ == "__main__":
     train_csv = 'train_gta5_annotations.csv'
     val_csv = 'val_gta5_annotations.csv'
 
+
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
+    
+    print("⚙️  Avvio preprocessamento delle maschere...")
+    os.system("python preprocess_mask.py")
+    print("✅ Preprocessamento completato.\n")
+
     preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'
 
     train_dataset = GTA5.GTA5(
