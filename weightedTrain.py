@@ -16,7 +16,7 @@ import numpy as np
 from google.colab import files  # Per download automatico
 
 from models.bisenet.build_bisenet import BiSeNet
-import datasets.gta5 as GTA5
+import datasets.gta5WithoutRGB as GTA5
 
 scaler = GradScaler()
 
