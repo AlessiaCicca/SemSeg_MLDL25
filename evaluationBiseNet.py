@@ -137,7 +137,7 @@ if __name__ == "__main__":
 
     val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2)
     model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
-    model.load_state_dict(torch.load('/content/final_model_weighted_lr2.5e-05_bs4.pth', map_location=device))
+    model.load_state_dict(torch.load('/content/SemSeg_MLDL25/checkpoints/final_model_lr2.5e-05_bs4.pth', map_location=device))
 
 
    
