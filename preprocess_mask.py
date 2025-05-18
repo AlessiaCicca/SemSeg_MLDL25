@@ -4,6 +4,11 @@ import numpy as np
 from glob import glob
 from tqdm import tqdm  # barra di progresso, opzionale
 
+
+
+#SISTEMARE IN MODO CHE VENGA CHIAMATA IN AUTOMATICO
+
+
 # Mappa RGB -> trainId
 rgb_to_trainid = {
     (128, 64,128): 0,   # road
