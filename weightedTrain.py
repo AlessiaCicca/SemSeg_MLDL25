@@ -16,7 +16,6 @@ import numpy as np
 
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5 as GTA5
-from focalLoss import FocalLoss
 
 scaler = GradScaler()  
 
