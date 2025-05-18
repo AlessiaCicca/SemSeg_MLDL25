@@ -13,7 +13,7 @@ import time
 from PIL import Image
 from tqdm import tqdm
 import numpy as np
-from google.colab import files  # Per download automatico
+from google.colab import files
 
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5WithoutRGB as GTA5
@@ -22,8 +22,8 @@ scaler = GradScaler()
 
 def compute_class_weights(label_dir, num_classes=19):
     class_pixel_counts = np.zeros(num_classes, dtype=np.int64)
-
     mask_paths = glob(os.path.join(label_dir, "*.png"))
+
     for mask_path in tqdm(mask_paths, desc="Calcolo frequenze classi"):
         mask = np.array(Image.open(mask_path))
         for class_id in range(num_classes):
@@ -31,9 +31,24 @@ def compute_class_weights(label_dir, num_classes=19):
 
     total_pixels = np.sum(class_pixel_counts)
     class_freqs = class_pixel_counts / total_pixels
-
     weights = 1.0 / (np.log(1.02 + class_freqs))
     return torch.FloatTensor(weights)
+
+def calculate_mIoU(preds, targets, num_classes=19, ignore_index=255):
+    ious = []
+    for cls in range(num_classes):
+        if cls == ignore_index:
+            continue
+        pred_inds = (preds == cls)
+        target_inds = (targets == cls)
+        intersection = (pred_inds & target_inds).sum().item()
+        union = (pred_inds | target_inds).sum().item()
+        if union == 0:
+            ious.append(float('nan'))
+        else:
+            ious.append(intersection / union)
+    valid_ious = [iou for iou in ious if not np.isnan(iou)]
+    return np.mean(valid_ious) if valid_ious else 0.0
 
 def train(epoch, model, train_loader, criterion, optimizer, device):
     model.train()
@@ -41,7 +56,6 @@ def train(epoch, model, train_loader, criterion, optimizer, device):
 
     for inputs, targets in train_loader:
         inputs, targets = inputs.to(device), targets.to(device)
-
         optimizer.zero_grad()
 
         with autocast('cuda'):
@@ -63,28 +77,35 @@ def train(epoch, model, train_loader, criterion, optimizer, device):
     acc = 100. * correct / total
     print(f'Train Epoch {epoch} - Loss: {running_loss / len(train_loader):.4f} - Acc: {acc:.2f}%')
 
-def validate(model, val_loader, criterion, device):
+def validate(model, val_loader, criterion, device, num_classes=19):
     model.eval()
     val_loss, correct, total = 0, 0, 0
+    all_preds, all_targets = [], []
 
     with torch.no_grad():
         for inputs, targets in val_loader:
             inputs, targets = inputs.to(device), targets.to(device)
-
             outputs = model(inputs)
             loss = criterion(outputs, targets.squeeze(1).long())
-
             val_loss += loss.item()
+
             _, predicted = torch.max(outputs, 1)
             correct += (predicted == targets.squeeze(1)).sum().item()
             total += torch.numel(targets.squeeze(1))
+
+            all_preds.append(predicted.cpu())
+            all_targets.append(targets.squeeze(1).cpu())
 
             del inputs, targets, outputs, predicted, loss
             gc.collect()
 
     acc = 100. * correct / total
-    print(f'Validation - Loss: {val_loss / len(val_loader):.4f} - Acc: {acc:.2f}%')
-    return acc
+    all_preds = torch.cat(all_preds)
+    all_targets = torch.cat(all_targets)
+    miou = calculate_mIoU(all_preds, all_targets, num_classes)
+
+    print(f'Validation - Loss: {val_loss / len(val_loader):.4f} - Acc: {acc:.2f}% - mIoU: {miou:.4f}')
+    return acc, miou
 
 def find_folder(start_path, folder_name):
     for root, dirs, _ in os.walk(start_path):
@@ -95,21 +116,18 @@ def find_folder(start_path, folder_name):
 if __name__ == "__main__":
     print(">>> Avvio training...")
 
-    # ESECUZIONE PREPROCESSAMENTO MASCHERE
     print("⚙️  Avvio preprocessamento delle maschere...")
     os.system("python preprocess_mask.py")
     print("✅ Preprocessamento completato.\n")
 
     base_extract_path = './tmp/GTA5'
     zip_path = 'gt5_dataset.zip'
-
     gdrive_id = "1xYxlcMR2WFCpayNrW2-Rb7N-950vvl23"
     gdown_url = f"https://drive.google.com/uc?id={gdrive_id}"
 
     if not os.path.exists(base_extract_path):
         print("📦 Dataset non trovato o incompleto, lo scarico...")
         gdown.download(gdown_url, zip_path, quiet=False)
-
         if zipfile.is_zipfile(zip_path):
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(base_extract_path)
@@ -127,7 +145,6 @@ if __name__ == "__main__":
     val_csv = 'val_gta5_annotations.csv'
 
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
-
     preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'
 
     train_dataset = GTA5.GTA5(
@@ -172,25 +189,25 @@ if __name__ == "__main__":
     criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
 
-    best_acc = 0
+    best_miou = 0.0
 
     for epoch in range(num_epochs):
         print(f"\nEpoch {epoch+1}/{num_epochs}")
         train(epoch, model, train_loader, criterion, optimizer, device)
-        val_acc = validate(model, val_loader, criterion, device)
+        val_acc, val_miou = validate(model, val_loader, criterion, device)
 
         if epoch % 10 == 0 or epoch == num_epochs - 1:
             torch.save(model.state_dict(), f'checkpoints/checkpoint_epoch_{epoch}_lr{lr}_bs{bs}.pth')
             print(f"Checkpoint salvato per epoch {epoch}")
 
-        if val_acc > best_acc:
-            best_acc = val_acc
+        if val_miou > best_miou:
+            best_miou = val_miou
             torch.save(model.state_dict(), 'checkpoints/best_model.pth')
-            print(f"Nuovo best model con acc: {best_acc:.2f}%")
+            print(f"Nuovo best model con mIoU: {best_miou:.4f}")
 
     final_model_path = f'checkpoints/final_model_lr{lr}_bs{bs}.pth'
     torch.save(model.state_dict(), final_model_path)
-    print(f"🏁 Fine training per lr={lr}, bs={bs} | Best Acc: {best_acc:.2f}%")
+    print(f"🏁 Fine training per lr={lr}, bs={bs} | Best mIoU: {best_miou:.4f}")
     print("⬇️  Avvio download automatico del modello finale...")
 
     try:
