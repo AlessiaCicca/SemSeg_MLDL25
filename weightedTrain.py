@@ -168,7 +168,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs('checkpoints', exist_ok=True)
 
-    num_epochs = 10
+    num_epochs = 50
     lr= 0.000025
     bs= 4
 
