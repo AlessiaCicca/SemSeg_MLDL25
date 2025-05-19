@@ -153,13 +153,23 @@ if __name__ == "__main__":
     preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'  # la cartella dove hai salvato le maschere prepsateroces
 
 
+    base_train_dataset = GTA5.GTA5(
+    annotations_file=train_csv,
+    root_dir=base_extract_path,
+    transform=None,
+    target_transform=None,
+    mask_preprocessed_dir=preprocessed_masks_dir
+    )
 
-    
+    # 2. Ora crea la trasformazione passandogli il dataset base (per ClassMix)
+    train_transform = CustomAugmentation(dataset=base_train_dataset, crop_size=(512, 1024))
+
+        
 
     train_dataset = GTA5.GTA5(
         annotations_file=train_csv,
         root_dir=base_extract_path,
-        transform=CustomAugmentation(crop_size=(512, 1024)),
+        transform=train_transform,
         target_transform=None,
         mask_preprocessed_dir=preprocessed_masks_dir
     )
