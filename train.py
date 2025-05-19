@@ -160,7 +160,7 @@ if __name__ == "__main__":
                     best_acc = val_acc
                     best_lr=lr
                     best_bs=bs
-                    torch.save(model.state_dict(), 'checkpoints/best_model_lr{lr}_bs{bs}.pth')
+                    torch.save(model.state_dict(), f'checkpoints/best_model_lr{lr}_bs{bs}.pth')
                     print(f"Nuovo best model con acc: {best_acc:.2f}%")
 
 
