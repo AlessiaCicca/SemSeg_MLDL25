@@ -13,7 +13,7 @@ import time
 from PIL import Image
 from tqdm import tqdm
 import numpy as np
-
+import subprocess
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5WithoutRGB as GTA5
 from augDoppioDA import CombinedAugmentation, val_transform_fn_no_mask, val_transform_fn # se lo metti in un file separato
@@ -231,8 +231,12 @@ if __name__ == "__main__":
 
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
 
-    preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'  # cartella con maschere preprocessate
+    # Esegue lo script preprocess_mask.py
+    result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
+    print("Output preprocess_mask.py:\n", result.stdout)
 
+
+    preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'  # cartella con maschere preprocessate
     base_train_dataset = GTA5.GTA5(
         annotations_file=train_csv,
         root_dir=base_extract_path,
@@ -261,16 +265,14 @@ if __name__ == "__main__":
     )
 
     target_csv = 'cityscapes_target.csv'
-    target_root = './tmp/Cityscapes'
+    target_root = './Cityscapes/Cityscapes/Cityspaces/images'
     cityscapes.create_csv_no_labels(target_root, target_csv)
 
     target_dataset = cityscapes.CityscapesNoLabel(
-
         annotations_file=target_csv,
         transform=val_transform_fn_no_mask
-
-
     )
+
 
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
