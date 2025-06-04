@@ -17,7 +17,7 @@ import numpy as np
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5WithoutRGB as GTA5
 from augDoppioDA import CombinedAugmentation, val_transform_fn_no_mask, val_transform_fn # se lo metti in un file separato
-import datasets.cityscapes as cityscapes
+import cityscapesDA as cityscapes
 from discriminator import FCDiscriminator
 
 scaler = GradScaler()  
@@ -199,74 +199,50 @@ def find_folder(start_path, folder_name):
 if __name__ == "__main__":
     print(">>> Avvio training...")
 
-
-    #zip_path = 'cityscapes_dataset.zip'
     base_extract_path = './tmp/GTA5'
     zip_path = 'gt5_dataset.zip'
 
-    #DA COMMENTARE SE SCARICATE IL FILE IN LOCALE
-    #gdrive_id = "1xYxlcMR2WFCpayNrW2-Rb7N-950vvl23"
-    #gdown_url = f"https://drive.google.com/uc?id={gdrive_id}"
+    # DA COMMENTARE SE SCARICATE IL FILE IN LOCALE
+    gdrive_id = "1xYxlcMR2WFCpayNrW2-Rb7N-950vvl23"
+    gdown_url = f"https://drive.google.com/uc?id={gdrive_id}"
 
     if not os.path.exists(base_extract_path):
         print("📦 Dataset non trovato o incompleto, lo scarico...")
 
         # Scarica il file dal link corretto
-       # gdown.download(gdown_url, zip_path, quiet=False)
+        gdown.download(gdown_url, zip_path, quiet=False)
 
         # Verifica che sia uno zip valido
-       # if zipfile.is_zipfile(zip_path):
-          # with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-             # zip_ref.extractall(base_extract_path)
-           # print("✅ Estrazione completata.")
-       # else:
-          # print("❌ Il file scaricato non è un file zip valido.")
-          # os.remove(zip_path) # Elimina file corrotto
+        if zipfile.is_zipfile(zip_path):
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(base_extract_path)
+            print("✅ Estrazione completata.")
+        else:
+            print("❌ Il file scaricato non è un file zip valido.")
+            os.remove(zip_path)  # Elimina file corrotto
     else:
         print("✅ Dataset già presente.")
 
     train_images_dir = find_folder(base_extract_path, 'images')
     train_masks_dir = find_folder(base_extract_path, 'labels')
 
-
-    '''if not images_dir or not masks_dir:
-        raise RuntimeError("'images' o 'labels' non trovati dopo l’estrazione!")
-
-    train_images_dir = os.path.join(images_dir, 'train')
-    val_images_dir = os.path.join(images_dir, 'val')
-    train_masks_dir = os.path.join(masks_dir, 'train')
-    val_masks_dir = os.path.join(masks_dir, 'val')
-
-    base_path = os.path.commonpath([images_dir, masks_dir])'''
-
     train_csv = 'train_gta5_annotations.csv'
     val_csv = 'val_gta5_annotations.csv'
-    target_csv = 'cityscapes_target.csv'
 
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
 
-    preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid' # cartella con maschere preprocessate
+    preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'  # cartella con maschere preprocessate
 
-    ###############################
-    ### Cityscapes no labels ######
-    target_root = './tmp/Cityscapes'
-    cityscapes.create_csv_no_labels(target_root, target_csv)
-
-    ###############################
-
-   
     base_train_dataset = GTA5.GTA5(
         annotations_file=train_csv,
         root_dir=base_extract_path,
         transform=None,
         target_transform=None,
         mask_preprocessed_dir=preprocessed_masks_dir
-        )
+    )
 
-    # 2. Ora crea la trasformazione passandogli il dataset base (per ClassMix)
     train_transform = CombinedAugmentation(dataset=base_train_dataset, crop_size=(512, 1024))
 
-        
 
     train_dataset = GTA5.GTA5(
         annotations_file=train_csv,
@@ -276,16 +252,17 @@ if __name__ == "__main__":
         mask_preprocessed_dir=preprocessed_masks_dir
     )
 
-
-
     val_dataset = GTA5.GTA5(
-    annotations_file=val_csv,
-    root_dir=base_extract_path,
-    transform=val_transform_fn,
-    target_transform=None,
-    mask_preprocessed_dir=preprocessed_masks_dir
+        annotations_file=val_csv,
+        root_dir=base_extract_path,
+        transform=val_transform_fn,
+        target_transform=None,
+        mask_preprocessed_dir=preprocessed_masks_dir
     )
 
+    target_csv = 'cityscapes_target.csv'
+    target_root = './tmp/Cityscapes'
+    cityscapes.create_csv_no_labels(target_root, target_csv)
 
     target_dataset = cityscapes.CityscapesNoLabel(
 
