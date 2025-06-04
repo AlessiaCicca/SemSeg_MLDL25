@@ -16,7 +16,7 @@ import numpy as np
 
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5WithoutRGB as GTA5
-from augDoppio import CombinedAugmentation, val_transform_fn_no_mask, val_transform_fn # se lo metti in un file separato
+from augDoppioDA import CombinedAugmentation, val_transform_fn_no_mask, val_transform_fn # se lo metti in un file separato
 import datasets.cityscapes as cityscapes
 from discriminator import FCDiscriminator
 
