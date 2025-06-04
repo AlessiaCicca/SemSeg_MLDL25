@@ -38,8 +38,7 @@ class CityScapes(Dataset):
             mask = self.target_transform(mask)
 
         return image, mask
-    
-
+        
 class CityscapesNoLabel(Dataset):
     def __init__(self, annotations_file, transform=None):
         self.img_labels = pd.read_csv(annotations_file)
@@ -57,15 +56,18 @@ class CityscapesNoLabel(Dataset):
 
         return (image,) 
 
+
+
+
 # ------------------------------
 # Scarica e prepara il dataset
 # ------------------------------
 # ------------------------------
 # Parametri dataset
 # ------------------------------
-#download_url = 'https://drive.google.com/uc?id=1Qb4UrNsjvlU-wEsR9d7rckB0YS_LXgb2'
-#output_zip = 'cityscapes_dataset.zip'
-extract_dir = './tmp/Cityscapes'
+download_url = 'https://drive.google.com/uc?id=1Qb4UrNsjvlU-wEsR9d7rckB0YS_LXgb2'
+output_zip = 'cityscapes_dataset.zip'
+extract_dir = './Cityscapes'
 
 # ------------------------------
 # Funzione per cercare cartelle ricorsivamente
@@ -75,7 +77,7 @@ def find_folder(start_path, folder_name):
         if folder_name in dirs:
             return os.path.join(root, folder_name)
     return None
-'''
+
 # ------------------------------
 # Scarica ed estrai il dataset
 # ------------------------------
@@ -101,9 +103,7 @@ else:
 extract_dir = './Cityscapes'
 nested_path = os.path.join(extract_dir, 'Cityscapes', 'Cityscapes')
 if os.path.exists(nested_path):
-    extract_dir = nested_path # entra nel livello giusto
-
-'''
+    extract_dir = nested_path  # entra nel livello giusto
 
 # Rileva di nuovo le cartelle
 images_dir = find_folder(extract_dir, 'images')
@@ -164,8 +164,6 @@ def create_cityscapes_csv(images_dir, masks_dir, output_csv, root_dir):
 
     print(f"Creato CSV con {len(data)} coppie: {output_csv}")
 
-
-
 def create_csv_no_labels(images_dir, output_csv):
     # Cerca ricorsivamente le immagini *_leftImg8bit.png
     image_files = glob(os.path.join(images_dir, '**', '*_leftImg8bit.png'), recursive=True)
@@ -182,3 +180,6 @@ def create_csv_no_labels(images_dir, output_csv):
             writer.writerow([img_path]) # path assoluto
 
     print(f"Creato CSV con {len(image_files)} immagini: {output_csv}")
+
+
+
