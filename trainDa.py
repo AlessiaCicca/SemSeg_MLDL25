@@ -12,6 +12,7 @@ import gdown
 import time
 from PIL import Image
 from tqdm import tqdm
+from binaryfocal import BinaryFocalLoss, FocalLossMulticlass,FocalDiceLoss
 import numpy as np
 import subprocess
 from models.bisenet.build_bisenet import BiSeNet
@@ -19,8 +20,48 @@ import datasets.gta5WithoutRGB as GTA5
 from augDoppioDA import CombinedAugmentation, val_transform_fn_no_mask, val_transform_fn # se lo metti in un file separato
 import cityscapesDA as cityscapes
 from discriminator import FCDiscriminator
+import torch.nn.functional as F
 
 scaler = GradScaler()  
+
+# Implementazione semplice di DiceLoss
+class DiceLoss(nn.Module):
+    def __init__(self, smooth=1e-6):
+        super().__init__()
+        self.smooth = smooth
+
+    def forward(self, inputs, targets):
+        """
+        inputs: logits [B, C, H, W]
+        targets: class indices [B, H, W]
+        """
+        num_classes = inputs.shape[1]
+
+        # One-hot encoding dei target: [B, H, W] -> [B, C, H, W]
+        targets_one_hot = F.one_hot(targets, num_classes).permute(0, 3, 1, 2).float()
+
+        # Softmax su input logits
+        inputs_soft = F.softmax(inputs, dim=1)
+
+        # Calcolo Dice per ogni classe
+        dims = (0, 2, 3)  # somma su batch e spatial
+        intersection = torch.sum(inputs_soft * targets_one_hot, dims)
+        union = torch.sum(inputs_soft + targets_one_hot, dims)
+
+        dice = (2. * intersection + self.smooth) / (union + self.smooth)
+
+        # Media sulle classi
+        return 1 - dice.mean()
+
+
+#criterion_options = {
+    #"CrossEntropy": lambda class_weights, ignore_index: nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_index),
+    #"DiceLoss": lambda class_weights, ignore_index: DiceLoss(),
+ #   "FocalLoss": lambda class_weights, ignore_index: FocalLossMulticlass(gamma=2.0)
+#}
+criterion_options = {
+    "FocalLoss": lambda class_weights, ignore_index:  FocalLossMulticlass(gamma=2.0, weight=class_weights, ignore_index=255)
+}
 
 
 def compute_class_weights(label_dir, num_classes=19):
@@ -230,12 +271,13 @@ if __name__ == "__main__":
     val_csv = 'val_gta5_annotations.csv'
 
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
-
+    '''
     # Esegue lo script preprocess_mask.py
     result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
     print("Output preprocess_mask.py:\n", result.stdout)
-
-
+    if result.stderr:
+        print("Errori preprocess_mask.py:\n", result.stderr)
+    '''
     preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'  # cartella con maschere preprocessate
     base_train_dataset = GTA5.GTA5(
         annotations_file=train_csv,
@@ -276,57 +318,65 @@ if __name__ == "__main__":
 
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    os.makedirs('checkpoints', exist_ok=True)
+os.makedirs('checkpoints', exist_ok=True)
 
-    num_epochs = 10
-    lambda_adv = 0.001 #controlla il peso dell'adattamento
-    lr = 0.000025
-    bs = 4
+num_epochs = 50
+lr = 0.000025
+bs = 4
 
-    print(f"\n>>> Inizio training con lr={lr}, batch_size={bs}")
-    train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True,
-                              num_workers=2, pin_memory=True) 
-    
-    target_loader = DataLoader(target_dataset, batch_size=bs, shuffle=True, num_workers=2, pin_memory=True, drop_last=True)
+print(f"\n>>> Inizio training multi-esperimento con lr={lr}, batch_size={bs}")
+train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True, num_workers=2, pin_memory=True)
+target_loader = DataLoader(target_dataset, batch_size=bs, shuffle=True, num_workers=2, pin_memory=True, drop_last=True)
+val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False, num_workers=2, pin_memory=True)
 
-   
-    start = time.time()
-    for i, (inputs, targets) in enumerate(train_loader):
-        if i == 5: # solo 5 batch per test
-            break
-    end = time.time()
-    print(f"Tempo per caricare 5 batch: {end - start:.2f} secondi")
+model_tmp = BiSeNet(num_classes=19, context_path='resnet18').to(device)  # temporaneo per pesi
+trainid_mask_dir = "./tmp/GTA5/GTA5/labels_trainid"
+class_weights = compute_class_weights(trainid_mask_dir).to(device)
+#criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
+del model_tmp  # non serve più
 
-    val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False,
-                            num_workers=2, pin_memory=True)
+#lambda_adv_list = [0.001, 0.002, 0.005]
+lambda_adv_list = [0.001]
+use_weighted_bce_options = [ True]
 
-    model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
-    discriminator = FCDiscriminator(num_classes=19).to(device)
-    trainid_mask_dir = "./tmp/GTA5/GTA5/labels_trainid"
-    class_weights = compute_class_weights(trainid_mask_dir).to(device)
+for use_weighted_bce in use_weighted_bce_options:
+    for lambda_adv in lambda_adv_list:
+        for loss_name, criterion_fn in criterion_options.items():
+            print(f"\n====== Esperimento: lambda_adv={lambda_adv}, loss={loss_name}, BCE weighted={use_weighted_bce} ======")
 
-    # Crea la loss pesata
-    criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
-    criterion_ad = nn.BCEWithLogitsLoss() # uso questa loss perchè il discriminatore è un classifcatore binario. Serve dunque una loss che gestisca target binari (il paper suggerisce questa loss)
-    #criterion = nn.CrossEntropyLoss(ignore_index=255)
-    optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
-    optimizer_disc = torch.optim.Adam(discriminator.parameters(), lr=1e-4, betas=(0.9, 0.99))
-    best_acc = 0
-    best_miou = 0
+            model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
+            discriminator = FCDiscriminator(num_classes=19).to(device)
 
-    for epoch in range(num_epochs):
-        print(f"\nEpoch {epoch+1}/{num_epochs}")
-        train_adapt(epoch, model, discriminator, train_loader, target_loader, criterion, criterion_ad, optimizer, optimizer_disc, device, lambda_adv)
-        val_acc, val_miou = validate(model, val_loader, criterion, device)
+            optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+            optimizer_disc = torch.optim.Adam(discriminator.parameters(), lr=1e-4, betas=(0.9, 0.99))
 
-        if epoch % 10 == 0 or epoch == num_epochs - 1:
-            torch.save(model.state_dict(), f'checkpoints/checkpoint_epoch_{epoch}_lr{lr}_bs{bs}.pth')
-            print(f"checkpoint epoch {epoch}")
+            criterion = criterion_fn(class_weights, ignore_index=255).to(device)
 
-        if val_miou > best_miou:
-            best_miou = val_miou
-            torch.save(model.state_dict(), 'checkpoints/best_model.pth')
-            print(f"Nuovo best model con mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
+            if use_weighted_bce:
+                pos_weight = torch.tensor([2.0]).to(device)
+                criterion_ad = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            else:
+                criterion_ad = nn.BCEWithLogitsLoss()
 
-    torch.save(model.state_dict(), f'checkpoints/final_model_lr{lr}_bs{bs}.pth')
-    print(f"Fine training per lr={lr}, bs={bs} | Best mIoU: {best_miou:.2f}%")
+            best_miou = 0
+            exp_name = f"lambda{lambda_adv}_loss{loss_name}_BCEweighted{use_weighted_bce}"
+            exp_ckpt_dir = os.path.join("checkpoints", exp_name)
+            os.makedirs(exp_ckpt_dir, exist_ok=True)
+
+            for epoch in range(num_epochs):
+                print(f"\n[Exp: {exp_name}] Epoch {epoch+1}/{num_epochs}")
+                train_adapt(epoch, model, discriminator, train_loader, target_loader,
+                            criterion, criterion_ad, optimizer, optimizer_disc, device, lambda_adv)
+
+                val_acc, val_miou = validate(model, val_loader, criterion, device)
+
+                if val_miou > best_miou:
+                    best_miou = val_miou
+                    torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'best_model.pth'))
+                    print(f"✔️ Nuovo best model con mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
+
+                if epoch % 10 == 0 or epoch == num_epochs - 1:
+                    torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, f'checkpoint_epoch_{epoch}.pth'))
+
+            torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'final_model.pth'))
+            print(f"🏁 Fine esperimento: {exp_name} | Best mIoU: {best_miou:.2f}%")
