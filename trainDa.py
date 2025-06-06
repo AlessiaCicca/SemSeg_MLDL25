@@ -12,7 +12,7 @@ import gdown
 import time
 from PIL import Image
 from tqdm import tqdm
-from binaryfocal import BinaryFocalLoss, FocalLossMulticlass,FocalDiceLoss
+from binaryfocal import FocalLossMulticlass
 import numpy as np
 import subprocess
 from models.bisenet.build_bisenet import BiSeNet
