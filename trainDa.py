@@ -320,7 +320,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.makedirs('checkpoints', exist_ok=True)
 
-num_epochs = 50
+num_epochs = 10
 lr = 0.000025
 bs = 4
 
@@ -345,6 +345,8 @@ for use_weighted_bce in use_weighted_bce_options:
             print(f"\n====== Esperimento: lambda_adv={lambda_adv}, loss={loss_name}, BCE weighted={use_weighted_bce} ======")
 
             model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
+            #model.load_state_dict(torch.load('/content/SemSeg_MLDL25/checkpoints/lambda0.001_lossFocalLoss_BCEweightedTrue/best_model.pth', map_location=device)) #da cancellare
+
             discriminator = FCDiscriminator(num_classes=19).to(device)
 
             optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
@@ -364,7 +366,7 @@ for use_weighted_bce in use_weighted_bce_options:
             os.makedirs(exp_ckpt_dir, exist_ok=True)
 
             for epoch in range(num_epochs):
-                print(f"\n[Exp: {exp_name}] Epoch {epoch+1}/{num_epochs}")
+                print(f"\n[Exp: {exp_name}] Epoch {epoch}/{num_epochs}")
                 train_adapt(epoch, model, discriminator, train_loader, target_loader,
                             criterion, criterion_ad, optimizer, optimizer_disc, device, lambda_adv)
 
