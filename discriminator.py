@@ -1,4 +1,4 @@
-'''
+
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -65,3 +65,4 @@ class FCDiscriminator(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+'''
