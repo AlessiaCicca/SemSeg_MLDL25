@@ -205,4 +205,3 @@ def create_gta5_csv(images_dir, masks_dir, output_train_csv, output_val_csv, roo
 
     print(f"Creato CSV con {len(data_train)} coppie: {output_train_csv}")
     print(f"Creato CSV con {len(data_val)} coppie: {output_val_csv}")
-
