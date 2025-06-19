@@ -7,7 +7,7 @@ trainBisenet.py
 evaluationBisenet.py or evalBisenet.py (automatico fatto da antonio)
 
 punto3a (non passando augumentation)/3b
-weightedTrainDoppio.py
+weightedTrainAnto.py
 augDoppio.py (augDoppioDA.py sono uguali)
 
 punto 4
