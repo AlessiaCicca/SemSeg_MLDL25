@@ -1,0 +1,18 @@
+punto 2a
+trainDeeplab.py
+evaluationDeepLab.py
+
+punto 2b
+trainBisenet.py
+evaluationBisenet.py or evalBisenet.py (automatico fatto da antonio)
+
+punto3a (non passando augumentation)/3b
+weightedTrainDoppio.py
+augDoppio.py (augDoppioDA.py sono uguali)
+
+punto 4
+augDoppioDA.py e cityscapesDA.py  per le noMask
+preprocess_mask.py da implemetnare
+trainDA.py da sistemare
+
+IL RESTO SI POTREBBE CANCELLARE
