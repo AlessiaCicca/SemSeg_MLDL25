@@ -21,6 +21,8 @@ from augDoppioDA import CombinedAugmentation, val_transform_fn_no_mask, val_tran
 import cityscapesDA as cityscapes
 from discriminator import FCDiscriminator
 import torch.nn.functional as F
+import shutil
+from google.colab import files
 
 scaler = GradScaler()  
 
@@ -60,7 +62,9 @@ class DiceLoss(nn.Module):
  #   "FocalLoss": lambda class_weights, ignore_index: FocalLossMulticlass(gamma=2.0)
 #}
 criterion_options = {
+   # "CrossEntropy": lambda class_weights, ignore_index: nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_index),
     "FocalLoss": lambda class_weights, ignore_index:  FocalLossMulticlass(gamma=2.0, weight=class_weights, ignore_index=255)
+  
 }
 
 
@@ -287,7 +291,7 @@ if __name__ == "__main__":
         mask_preprocessed_dir=preprocessed_masks_dir
     )
 
-    train_transform = CombinedAugmentation(dataset=base_train_dataset, crop_size=(512, 1024))
+    train_transform = CombinedAugmentation(dataset=base_train_dataset,crop_size=(512, 1024))
 
 
     train_dataset = GTA5.GTA5(
@@ -320,7 +324,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 os.makedirs('checkpoints', exist_ok=True)
 
-num_epochs = 10
+num_epochs = 50
 lr = 0.000025
 bs = 4
 
@@ -337,7 +341,7 @@ del model_tmp  # non serve più
 
 #lambda_adv_list = [0.001, 0.002, 0.005]
 lambda_adv_list = [0.001]
-use_weighted_bce_options = [ True]
+use_weighted_bce_options = [ False]
 
 for use_weighted_bce in use_weighted_bce_options:
     for lambda_adv in lambda_adv_list:
@@ -345,7 +349,7 @@ for use_weighted_bce in use_weighted_bce_options:
             print(f"\n====== Esperimento: lambda_adv={lambda_adv}, loss={loss_name}, BCE weighted={use_weighted_bce} ======")
 
             model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
-            #model.load_state_dict(torch.load('/content/SemSeg_MLDL25/checkpoints/lambda0.001_lossFocalLoss_BCEweightedTrue/best_model.pth', map_location=device)) #da cancellare
+           # model.load_state_dict(torch.load('/content/20epochecrossentropy.pth', map_location=device)) #da cancellare
 
             discriminator = FCDiscriminator(num_classes=19).to(device)
 
@@ -366,7 +370,7 @@ for use_weighted_bce in use_weighted_bce_options:
             os.makedirs(exp_ckpt_dir, exist_ok=True)
 
             for epoch in range(num_epochs):
-                print(f"\n[Exp: {exp_name}] Epoch {epoch}/{num_epochs}")
+                print(f"\n[Exp: {exp_name}] Epoch {epoch+1}/{num_epochs+1}")
                 train_adapt(epoch, model, discriminator, train_loader, target_loader,
                             criterion, criterion_ad, optimizer, optimizer_disc, device, lambda_adv)
 
@@ -378,7 +382,18 @@ for use_weighted_bce in use_weighted_bce_options:
                     print(f"✔️ Nuovo best model con mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
 
                 if epoch % 10 == 0 or epoch == num_epochs - 1:
-                    torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, f'checkpoint_epoch_{epoch}.pth'))
+                    torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'discriminator_state_dict': discriminator.state_dict(),
+                    'optimizer_G_state_dict': optimizer.state_dict(),
+                    'optimizer_D_state_dict': optimizer_disc.state_dict(),
+                    'scaler_state_dict': scaler.state_dict(),
+                }, 'checkpoint_all.pth')
+                   # files.download(os.path.join(exp_ckpt_dir, f'checkpoint_epoch_{epoch}.pth'))
 
             torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'final_model.pth'))
             print(f"🏁 Fine esperimento: {exp_name} | Best mIoU: {best_miou:.2f}%")
+
+
+
