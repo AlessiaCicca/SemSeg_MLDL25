@@ -1,265 +1,399 @@
-import random
-import numbers
-import math
-import numpy as np
-from PIL import Image
-import torchvision.transforms.functional as F
-from torchvision.transforms import PILToTensor, InterpolationMode
-from torchvision.transforms import InterpolationMode
-import random
+import os
+import zipfile
+import shutil
+import gc
+from glob import glob
 import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader
+from torch.amp import autocast, GradScaler  
+import gdown
+import time
 from PIL import Image
+from tqdm import tqdm
+from binaryfocal import FocalLossMulticlass
 import numpy as np
-from torchvision.transforms import InterpolationMode, PILToTensor, Normalize
-from torchvision.transforms.functional import to_tensor
-from torchvision.transforms.functional import normalize
+import subprocess
+from models.bisenet.build_bisenet import BiSeNet
+import datasets.gta5WithoutRGB as GTA5
+from augDoppioDA import CombinedAugmentation, val_transform_fn_no_mask, val_transform_fn # se lo metti in un file separato
+import cityscapesDA as cityscapes
+from discriminator import FCDiscriminator
+import torch.nn.functional as F
+import shutil
+from google.colab import files
+
+scaler = GradScaler()  
+
+# Implementazione semplice di DiceLoss
+class DiceLoss(nn.Module):
+    def __init__(self, smooth=1e-6):
+        super().__init__()
+        self.smooth = smooth
+
+    def forward(self, inputs, targets):
+        """
+        inputs: logits [B, C, H, W]
+        targets: class indices [B, H, W]
+        """
+        num_classes = inputs.shape[1]
+
+        # One-hot encoding dei target: [B, H, W] -> [B, C, H, W]
+        targets_one_hot = F.one_hot(targets, num_classes).permute(0, 3, 1, 2).float()
+
+        # Softmax su input logits
+        inputs_soft = F.softmax(inputs, dim=1)
+
+        # Calcolo Dice per ogni classe
+        dims = (0, 2, 3)  # somma su batch e spatial
+        intersection = torch.sum(inputs_soft * targets_one_hot, dims)
+        union = torch.sum(inputs_soft + targets_one_hot, dims)
+
+        dice = (2. * intersection + self.smooth) / (union + self.smooth)
+
+        # Media sulle classi
+        return 1 - dice.mean()
 
 
-# Qui assumo che le classi RandomSized, AdjustGamma, AdjustSaturation, AdjustHue, AdjustBrightness, AdjustContrast
-# siano già definite come nel tuo codice precedente, oppure le definisco sotto.
+#criterion_options = {
+    #"CrossEntropy": lambda class_weights, ignore_index: nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_index),
+    #"DiceLoss": lambda class_weights, ignore_index: DiceLoss(),
+ #   "FocalLoss": lambda class_weights, ignore_index: FocalLossMulticlass(gamma=2.0)
+#}
+criterion_options = {
+    "CrossEntropy": lambda class_weights, ignore_index: nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_index),
+   # "FocalLoss": lambda class_weights, ignore_index:  FocalLossMulticlass(gamma=2.0, weight=class_weights, ignore_index=255)
+  
+}
 
-class AdjustGamma(object):
-    def __init__(self, gamma):
-        self.gamma = gamma
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
-        return F.adjust_gamma(img, random.uniform(1, 1 + self.gamma)), mask
+def compute_class_weights(label_dir, num_classes=19):
+    class_pixel_counts = np.zeros(num_classes, dtype=np.int64)
 
-class AdjustSaturation(object):
-    def __init__(self, saturation):
-        self.saturation = saturation
+    mask_paths = glob(os.path.join(label_dir, "*.png"))
+    for mask_path in tqdm(mask_paths, desc="Calcolo frequenze classi"):
+        mask = np.array(Image.open(mask_path))
+        for class_id in range(num_classes):
+            class_pixel_counts[class_id] += np.sum(mask == class_id)
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
-        return (
-            F.adjust_saturation(img, random.uniform(1 - self.saturation, 1 + self.saturation)),
-            mask,
-        )
+    total_pixels = np.sum(class_pixel_counts)
+    class_freqs = class_pixel_counts / total_pixels
 
-class AdjustHue(object):
-    def __init__(self, hue):
-        self.hue = hue
+    # Formula del paper ENet (Weighted Cross Entropy)
+    weights = 1.0 / (np.log(1.02 + class_freqs))
+    return torch.FloatTensor(weights)
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
-        return F.adjust_hue(img, random.uniform(-self.hue, self.hue)), mask
 
-class AdjustBrightness(object):
-    def __init__(self, bf):
-        self.bf = bf
+def compute_miou(preds, labels, num_classes=19, ignore_index=255):
+    """
+    Calcola la mean Intersection over Union (mIoU).
+    preds: Tensor [N, H, W] - predizioni per pixel (classe)
+    labels: Tensor [N, H, W] - ground truth per pixel
+    """
+    ious = []
+    preds = preds.cpu().numpy()
+    labels = labels.cpu().numpy()
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
-        return F.adjust_brightness(img, random.uniform(1 - self.bf, 1 + self.bf)), mask
+    for cls in range(num_classes):
+        if cls == ignore_index:
+            continue
+        pred_inds = (preds == cls)
+        label_inds = (labels == cls)
 
-class AdjustContrast(object):
-    def __init__(self, cf):
-        self.cf = cf
+        intersection = np.logical_and(pred_inds, label_inds).sum()
+        union = np.logical_or(pred_inds, label_inds).sum()
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
-        return F.adjust_contrast(img, random.uniform(1 - self.cf, 1 + self.cf)), mask
+        if union == 0:
+            # Classe non presente in questo batch
+            continue
+        iou = intersection / union
+        ious.append(iou)
 
-class Scale(object):
-    def __init__(self, size):
-        self.size = size
+    if len(ious) == 0:
+        return 0.0
+    return np.mean(ious)
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
-        w, h = img.size
-        if (w >= h and w == self.size) or (h >= w and h == self.size):
-            return img, mask
-        if w > h:
-            ow = self.size
-            oh = int(self.size * h / w)
-            return (img.resize((ow, oh), Image.BILINEAR), mask.resize((ow, oh), Image.NEAREST))
-        else:
-            oh = self.size
-            ow = int(self.size * w / h)
-            return (img.resize((ow, oh), Image.BILINEAR), mask.resize((ow, oh), Image.NEAREST))
 
-class CenterCrop(object):
-    def __init__(self, size):
-        if isinstance(size, numbers.Number):
-            self.size = (int(size), int(size))
-        else:
-            self.size = size
+def train_adapt(epoch, model, discriminator, train_loader, target_loader,
+                criterion, criterion_adv, optimizer_G, optimizer_D,
+                device, lambda_adv):
+    
+    model.train()
+    discriminator.train()
+    running_seg, running_adv, running_D = 0.0, 0.0, 0.0
+    correct, total = 0, 0
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
-        w, h = img.size
-        th, tw = self.size
-        x1 = int(round((w - tw) / 2.0))
-        y1 = int(round((h - th) / 2.0))
-        return (img.crop((x1, y1, x1 + tw, y1 + th)), mask.crop((x1, y1, x1 + tw, y1 + th)))
+    # Iteratore per il dominio target (immagini senza label)
+    target_iter = iter(target_loader)
 
-class RandomCrop(object):
-    def __init__(self, size):
-        if isinstance(size, numbers.Number):
-            self.size = (int(size), int(size))
-        else:
-            self.size = size
+    for inputs_src, targets_src in train_loader:
+        inputs_src, targets_src = inputs_src.to(device), targets_src.to(device)
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
-        w, h = img.size
-        th, tw = self.size
-        if w == tw and h == th:
-            return img, mask
-        if w < tw or h < th:
-            return (img.resize((tw, th), Image.BILINEAR), mask.resize((tw, th), Image.NEAREST))
+        try:
+            inputs_tgt = next(target_iter)[0].to(device)
+        except StopIteration:
+            target_iter = iter(target_loader)
+            inputs_tgt = next(target_iter)[0].to(device)
 
-        x1 = random.randint(0, w - tw)
-        y1 = random.randint(0, h - th)
-        return (img.crop((x1, y1, x1 + tw, y1 + th)), mask.crop((x1, y1, x1 + tw, y1 + th)))
+        # ======== FORWARD & DISCRIMINATOR TRAINING ========
+        with autocast('cuda'):
+            out_src = model(inputs_src)[0] # output della segmentazione source
+            out_tgt = model(inputs_tgt)[0] # output della segmentazione target
 
-class RandomSized(object):
-    def __init__(self, size):
-        self.size = size
-        self.scale = Scale(self.size)
-        self.crop = RandomCrop(self.size)
+            # Loss supervisata sul dominio source
+            loss_seg = criterion(out_src, targets_src.squeeze(1).long())
 
-    def __call__(self, img, mask):
-        assert img.size == mask.size
+            # Discriminatore: softmax su output (detach per evitare backprop in G)
+            soft_src = torch.softmax(out_src.detach(), dim=1)
+            soft_tgt = torch.softmax(out_tgt.detach(), dim=1)
 
-        w = int(random.uniform(0.5, 2) * img.size[0])
-        h = int(random.uniform(0.5, 2) * img.size[1])
+            # fornisco al discriminatore le predizioni fatte sia sul source che sul target e ottengo una stima (cerca di indovinare se provengono dal dominio source o target)
+            pred_src = discriminator(soft_src)
+            pred_tgt = discriminator(soft_tgt)
 
-        img, mask = (img.resize((w, h), Image.BILINEAR), mask.resize((w, h), Image.NEAREST))
+            # La loss del discriminatore punisce gli errori nel distinguere le predizioni dei due domini.
+            loss_D = 0.5 * (
+                criterion_adv(pred_src, torch.ones_like(pred_src)) + # "vero" se source
+                criterion_adv(pred_tgt, torch.zeros_like(pred_tgt)) # "falso" se target
+            )
 
-        return self.crop(*self.scale(img, mask))
+        # === BACKWARD discriminatore === Qui aggiorni i pesi di D per migliorare la sua capacità di distinguere source e target.
+        ''' 
+        Perché prima back su discriminatore e poi sul segmentatore?
 
-class CombinedAugmentation:
-    def __init__(self, dataset, crop_size=(512, 1024), rare_classes=[12, 13, 17, 18], scale_choices=[0.75, 1.0, 1.5, 1.75, 2.0]):
-        self.dataset = dataset
-        self.crop_size = crop_size
-        self.rare_classes = rare_classes
-        self.scale_choices = scale_choices
-
-        self.mean = [0.485, 0.456, 0.406]
-        self.std = [0.229, 0.224, 0.225]
-
-        self.random_sized = RandomSized(crop_size[0])
-        self.adjust_gamma = AdjustGamma(gamma=0.5)
-        self.adjust_saturation = AdjustSaturation(saturation=0.5)
-        self.adjust_hue = AdjustHue(hue=0.1)
-        self.adjust_brightness = AdjustBrightness(bf=0.3)
-        self.adjust_contrast = AdjustContrast(cf=0.3)
-
-    def __call__(self, image: Image.Image, mask: Image.Image):
-        # 1) Applicare prima le trasformazioni geometriche e colore alla immagine e mask input
-        scale = random.choice(self.scale_choices)
-        new_size = (int(image.height * scale), int(image.width * scale))
-        image = F.resize(image, new_size)
-        mask = F.resize(mask, new_size, interpolation=InterpolationMode.NEAREST)
-
-        if random.random() > 0.5:
-            image = F.hflip(image)
-            mask = F.hflip(mask)
-
-        angle = random.uniform(-10, 10)
-        image = F.rotate(image, angle, interpolation=InterpolationMode.BILINEAR)
-        mask = F.rotate(mask, angle, interpolation=InterpolationMode.NEAREST)
-
-        image, mask = self.random_sized(image, mask)
-
-        color_transforms = [
-            self.adjust_gamma,
-            self.adjust_saturation,
-            self.adjust_hue,
-            self.adjust_brightness,
-            self.adjust_contrast,
-        ]
-        random.shuffle(color_transforms)
-        for t in color_transforms:
-            image, mask = t(image, mask)
-
-        # 2) Ora applica il mixing con immagine e mask da dataset in base alle rare_classes
-
-        while True:
-            idx = random.randint(0, len(self.dataset) - 1)
-            image_b, mask_b = self.dataset[idx]
-
-            # Convert mask_b in numpy array per verifica rare classes
-            if isinstance(mask_b, Image.Image):
-                mask_b_np = np.array(mask_b)
-            elif isinstance(mask_b, torch.Tensor):
-                mask_b_np = mask_b.cpu().numpy()
-            elif isinstance(mask_b, np.ndarray):
-                mask_b_np = mask_b
-            else:
-                raise TypeError(f"mask_b deve essere numpy array, torch tensor o PIL Image, ma è {type(mask_b)}")
-
-            if any(np.any(mask_b_np == cls) for cls in self.rare_classes):
-                break
-
-        # Resize immagini e maschere a crop_size
-        target_size = (self.crop_size[0], self.crop_size[1])
-        image = F.resize(image, target_size)
-        mask = F.resize(mask, target_size, interpolation=InterpolationMode.NEAREST)
-
-        if not isinstance(image_b, Image.Image):
-            if isinstance(image_b, torch.Tensor):
-                image_b = Image.fromarray((image_b.permute(1, 2, 0).cpu().numpy() * 255).astype(np.uint8))
-            elif isinstance(image_b, np.ndarray):
-                image_b = Image.fromarray(image_b.astype(np.uint8))
-        image_b = F.resize(image_b, target_size)
+        Perché nel passo successivo, il segmentatore proverà a ingannare D.
+        Se aggiornassi prima G, poi D, il discriminatore riceverebbe gradienti “inquinati” da G non ancora stabile. D deve imparare a distinguere da G nella sua forma attuale, prima che G tenti di ingannarlo. 
         
-        if not isinstance(mask_b, Image.Image):
-            mask_b = Image.fromarray(mask_b_np.astype(np.uint8))
-        mask_b = F.resize(mask_b, target_size, interpolation=InterpolationMode.NEAREST)
+        '''
 
-        mask_b_np = np.array(mask_b)
-        class_mask = np.zeros_like(mask_b_np, dtype=np.uint8)
-        for cls in self.rare_classes:
-            class_mask[mask_b_np == cls] = 1
-        class_mask = torch.from_numpy(class_mask).float().unsqueeze(0)
+        optimizer_D.zero_grad()
+        scaler.scale(loss_D).backward()
+        scaler.step(optimizer_D)
 
-        # Converti in tensor e normalizza (immagini)
-        image = to_tensor(image)
-        image_b = to_tensor(image_b)
-        image = normalize(image, self.mean, self.std)
-        image_b = normalize(image_b, self.mean, self.std)
+        # === BACKWARD segmentatore (G) ===
+        with autocast('cuda'):
+            soft_tgt_for_G = torch.softmax(out_tgt, dim=1)
+            pred_tgt_for_G = discriminator(soft_tgt_for_G)
 
-        mixed_image = image * (1 - class_mask) + image_b * class_mask
+            loss_adv = criterion_adv(pred_tgt_for_G, torch.ones_like(pred_tgt_for_G))
+            loss_total = loss_seg + lambda_adv * loss_adv
 
-        # Maschere come tensori
-        mask = torch.from_numpy(np.array(mask)).long()
-        mask_b = torch.from_numpy(mask_b_np).long()
-        mixed_mask = mask * (1 - class_mask.squeeze(0).long()) + mask_b * class_mask.squeeze(0).long()
+        optimizer_G.zero_grad()
+        scaler.scale(loss_total).backward()
+        scaler.step(optimizer_G)
+        scaler.update()
 
-        return mixed_image, mixed_mask
+        # === Logging ===
+        running_seg += loss_seg.item()
+        running_adv += loss_adv.item()
+        running_D += loss_D.item()
+
+        # usiamo solo il dominio source per calcolare l'accuratezza
+        _, predicted = torch.max(out_src, 1)
+        correct += (predicted == targets_src.squeeze(1)).sum().item()
+        total += torch.numel(targets_src.squeeze(1))
+
+        del inputs_src, targets_src, inputs_tgt, out_src, out_tgt
+        torch.cuda.empty_cache()
+
+    acc = 100. * correct / total
+    print(f"Train Epoch {epoch} - SegLoss: {running_seg/len(train_loader):.4f} - AdvLoss: {running_adv/len(train_loader):.4f} - DLoss: {running_D/len(train_loader):.4f} - Acc: {acc:.2f}%")
 
 
-def val_transform_fn(image: Image.Image, mask: Image.Image):
-    target_size = (512, 1024)
 
-    # Resize immagine (height, width) --> PIL vuole (width, height)
-    image = F.resize(image, target_size[::-1])
-    image = F.to_tensor(image)
-    image = F.normalize(image, mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
+def validate(model, val_loader, criterion, device, num_classes=19):
+    model.eval()
+    val_loss, correct, total = 0, 0, 0
+    miou_total = 0
+    count = 0
 
-    # Resize mask con interpolazione nearest
-    mask = F.resize(mask, target_size[::-1], interpolation=InterpolationMode.NEAREST)
-    mask = PILToTensor()(mask).long()
-    mask = mask.squeeze(0) # Rimuove il canale extra se presente, shape finale: [H, W]
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
 
-    return image, mask
+            outputs = model(inputs)
+            loss = criterion(outputs, targets.squeeze(1).long())
 
-def val_transform_fn_no_mask(image: Image.Image):
-    target_size = (512, 1024)
+            val_loss += loss.item()
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == targets.squeeze(1)).sum().item()
+            total += torch.numel(targets.squeeze(1))
 
-    # Resize immagine (height, width) --> PIL vuole (width, height)
-    image = F.resize(image, target_size[::-1])
-    image = F.to_tensor(image)
-    image = F.normalize(image, mean=[0.485, 0.456, 0.406],
-                             std=[0.229, 0.224, 0.225])
+            miou_batch = compute_miou(predicted, targets.squeeze(1), num_classes=num_classes)
+            miou_total += miou_batch
+            count += 1
 
-    # Resize mask con interpolazione nearest
-    '''mask = F.resize(mask, target_size[::-1], interpolation=InterpolationMode.NEAREST)
-    mask = PILToTensor()(mask).long()
-    mask = mask.squeeze(0) # Rimuove il canale extra se presente, shape finale: [H, W]'''
+            del inputs, targets, outputs, predicted, loss
+            gc.collect()
 
-    return image
+    acc = 100. * correct / total
+    mean_iou = 100. * (miou_total / count) if count > 0 else 0
+
+    print(f'Validation - Loss: {val_loss / len(val_loader):.4f} - Acc: {acc:.2f}% - mIoU: {mean_iou:.2f}%')
+    return acc, mean_iou
+
+
+def find_folder(start_path, folder_name):
+    for root, dirs, _ in os.walk(start_path):
+        if folder_name in dirs:
+            return os.path.join(root, folder_name)
+    return None
+
+
+if __name__ == "__main__":
+    print(">>> Avvio training...")
+
+    base_extract_path = './tmp/GTA5'
+    zip_path = 'gt5_dataset.zip'
+
+    # DA COMMENTARE SE SCARICATE IL FILE IN LOCALE
+    gdrive_id = "1xYxlcMR2WFCpayNrW2-Rb7N-950vvl23"
+    gdown_url = f"https://drive.google.com/uc?id={gdrive_id}"
+
+    if not os.path.exists(base_extract_path):
+        print("📦 Dataset non trovato o incompleto, lo scarico...")
+
+        # Scarica il file dal link corretto
+        gdown.download(gdown_url, zip_path, quiet=False)
+
+        # Verifica che sia uno zip valido
+        if zipfile.is_zipfile(zip_path):
+            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                zip_ref.extractall(base_extract_path)
+            print("✅ Estrazione completata.")
+        else:
+            print("❌ Il file scaricato non è un file zip valido.")
+            os.remove(zip_path)  # Elimina file corrotto
+    else:
+        print("✅ Dataset già presente.")
+
+    train_images_dir = find_folder(base_extract_path, 'images')
+    train_masks_dir = find_folder(base_extract_path, 'labels')
+
+    train_csv = 'train_gta5_annotations.csv'
+    val_csv = 'val_gta5_annotations.csv'
+
+    GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
+    '''
+    # Esegue lo script preprocess_mask.py
+    result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
+    print("Output preprocess_mask.py:\n", result.stdout)
+    if result.stderr:
+        print("Errori preprocess_mask.py:\n", result.stderr)
+    '''
+    preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'  # cartella con maschere preprocessate
+    base_train_dataset = GTA5.GTA5(
+        annotations_file=train_csv,
+        root_dir=base_extract_path,
+        transform=None,
+        target_transform=None,
+        mask_preprocessed_dir=preprocessed_masks_dir
+    )
+
+    train_transform = CombinedAugmentation(dataset=base_train_dataset,crop_size=(512, 1024))
+
+
+    train_dataset = GTA5.GTA5(
+        annotations_file=train_csv,
+        root_dir=base_extract_path,
+        transform=train_transform,
+        target_transform=None,
+        mask_preprocessed_dir=preprocessed_masks_dir
+    )
+
+    val_dataset = GTA5.GTA5(
+        annotations_file=val_csv,
+        root_dir=base_extract_path,
+        transform=val_transform_fn,
+        target_transform=None,
+        mask_preprocessed_dir=preprocessed_masks_dir
+    )
+
+    target_csv = 'cityscapes_target.csv'
+    target_root = './Cityscapes/Cityscapes/Cityspaces/images'
+    cityscapes.create_csv_no_labels(target_root, target_csv)
+
+    target_dataset = cityscapes.CityscapesNoLabel(
+        annotations_file=target_csv,
+        transform=val_transform_fn_no_mask
+    )
+
+
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+os.makedirs('checkpoints', exist_ok=True)
+
+num_epochs = 50
+lr = 0.000025
+bs = 4
+
+print(f"\n>>> Inizio training multi-esperimento con lr={lr}, batch_size={bs}")
+train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True, num_workers=2, pin_memory=True)
+target_loader = DataLoader(target_dataset, batch_size=bs, shuffle=True, num_workers=2, pin_memory=True, drop_last=True)
+val_loader = DataLoader(val_dataset, batch_size=bs, shuffle=False, num_workers=2, pin_memory=True)
+
+model_tmp = BiSeNet(num_classes=19, context_path='resnet18').to(device)  # temporaneo per pesi
+trainid_mask_dir = "./tmp/GTA5/GTA5/labels_trainid"
+class_weights = compute_class_weights(trainid_mask_dir).to(device)
+#criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
+del model_tmp  # non serve più
+
+#lambda_adv_list = [0.001, 0.002, 0.005]
+lambda_adv_list = [0.001]
+use_weighted_bce_options = [ False]
+
+for use_weighted_bce in use_weighted_bce_options:
+    for lambda_adv in lambda_adv_list:
+        for loss_name, criterion_fn in criterion_options.items():
+            print(f"\n====== Esperimento: lambda_adv={lambda_adv}, loss={loss_name}, BCE weighted={use_weighted_bce} ======")
+
+            model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
+           # model.load_state_dict(torch.load('/content/20epochecrossentropy.pth', map_location=device)) #da cancellare
+
+            discriminator = FCDiscriminator(num_classes=19).to(device)
+
+            optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
+            optimizer_disc = torch.optim.Adam(discriminator.parameters(), lr=1e-4, betas=(0.9, 0.99))
+
+            criterion = criterion_fn(class_weights, ignore_index=255).to(device)
+
+            if use_weighted_bce:
+                pos_weight = torch.tensor([2.0]).to(device)
+                criterion_ad = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
+            else:
+                criterion_ad = nn.BCEWithLogitsLoss()
+
+            best_miou = 0
+            exp_name = f"lambda{lambda_adv}_loss{loss_name}_BCEweighted{use_weighted_bce}"
+            exp_ckpt_dir = os.path.join("checkpoints", exp_name)
+            os.makedirs(exp_ckpt_dir, exist_ok=True)
+
+            for epoch in range(num_epochs):
+                print(f"\n[Exp: {exp_name}] Epoch {epoch}/{num_epochs}")
+                train_adapt(epoch, model, discriminator, train_loader, target_loader,
+                            criterion, criterion_ad, optimizer, optimizer_disc, device, lambda_adv)
+
+                val_acc, val_miou = validate(model, val_loader, criterion, device)
+
+                if val_miou > best_miou:
+                    best_miou = val_miou
+                    torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'best_model.pth'))
+                    print(f"✔️ Nuovo best model con mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
+
+                if epoch % 10 == 0 or epoch == num_epochs - 1:
+                    torch.save({
+                    'epoch': epoch,
+                    'model_state_dict': model.state_dict(),
+                    'discriminator_state_dict': discriminator.state_dict(),
+                    'optimizer_G_state_dict': optimizer.state_dict(),
+                    'optimizer_D_state_dict': optimizer_disc.state_dict(),
+                    'scaler_state_dict': scaler.state_dict(),
+                }, 'checkpoint_all.pth')
+                   # files.download(os.path.join(exp_ckpt_dir, f'checkpoint_epoch_{epoch}.pth'))
+
+            torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'final_model.pth'))
+            print(f"🏁 Fine esperimento: {exp_name} | Best mIoU: {best_miou:.2f}%")
+
+
+
