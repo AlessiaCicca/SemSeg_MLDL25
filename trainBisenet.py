@@ -17,7 +17,7 @@ from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5 as GTA5
 import datasets.cityscapes as cityscapes
 
-#TRAIN 3B
+#TRAIN 2B
 
 scaler = GradScaler()  
 
