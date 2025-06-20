@@ -24,7 +24,7 @@ from discriminator import FCDiscriminator
 
 criterion_options = {
     "CrossEntropy": lambda class_weights, ignore_index: nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_index),
-    # "FocalLoss": lambda class_weights, ignore_index: FocalLossMulticlass(gamma=2.0, weight=class_weights, ignore_index=255)
+     "FocalLoss": lambda class_weights, ignore_index: FocalLossMulticlass(gamma=2.0, weight=class_weights, ignore_index=255)
 }
 
 def compute_class_weights(label_dir, num_classes=19):
@@ -170,6 +170,10 @@ if _name_ == "_main_":
     train_csv = 'train_gta5_annotations.csv'
     val_csv = 'val_gta5_annotations.csv'
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
+    result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
+    print("Output preprocess_mask.py:\n", result.stdout)
+    if result.stderr:
+        print("Error preprocess_mask.py:\n", result.stderr)
     preprocessed_masks_dir = os.path.join(base_extract_path, 'GTA5', 'labels_trainid')
 
     base_train_dataset = GTA5.GTA5(train_csv, base_extract_path, None, None, preprocessed_masks_dir)
