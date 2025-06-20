@@ -69,7 +69,7 @@ def train(epoch, model, train_loader, criterion, optimizer, device):
         del inputs, targets, outputs, predicted, loss
         gc.collect()
     acc = 100. * correct / total
-    print(f'Train Epoch {epoch} - Loss: {running_loss / len(train_loader):.4f} - Acc: {acc:.2f}%')
+    print(f'Train Epoch {epoch+1} - Loss: {running_loss / len(train_loader):.4f} - Acc: {acc:.2f}%')
 
 def validate(model, val_loader, criterion, device, num_classes=19):
     model.eval()
