@@ -6,7 +6,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.amp import autocast, GradScaler 
-
+import numpy as np
 from models.deeplabv2.deeplabv2 import get_deeplab_v2
 import datasets.cityscapes as cityscapes
 
