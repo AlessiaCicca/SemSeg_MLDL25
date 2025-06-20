@@ -10,6 +10,8 @@ from torchvision.transforms.functional import (
     adjust_gamma, adjust_saturation, adjust_hue,
     adjust_brightness, adjust_contrast
 )
+#Configuration of the best result
+
 class AdjustGamma:
     def __init__(self, gamma):
         self.gamma = gamma
