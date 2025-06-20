@@ -98,7 +98,7 @@ def find_folder(start_path, folder_name):
             return os.path.join(root, folder_name)
     return None
 
-if __name__ == "_main_":
+if __name__ == "__main__":
     print(">>>Training...")
     tipo = 1
     base_extract_path = './tmp/GTA5'
