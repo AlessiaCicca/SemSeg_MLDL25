@@ -13,37 +13,16 @@ import time
 from PIL import Image
 from tqdm import tqdm
 import numpy as np
-
 from models.bisenet.build_bisenet import BiSeNet
-import datasets.gta5WithoutRGB as GTA5
+import datasets.gta5 as GTA5
 import datasets.cityscapes as cityscapes
 
+#TRAIN 3B
 
 scaler = GradScaler()  
 
 
-def compute_class_weights(label_dir, num_classes=19):
-    class_pixel_counts = np.zeros(num_classes, dtype=np.int64)
-
-    mask_paths = glob(os.path.join(label_dir, "*.png"))
-    for mask_path in tqdm(mask_paths, desc="Calcolo frequenze classi"):
-        mask = np.array(Image.open(mask_path))
-        for class_id in range(num_classes):
-            class_pixel_counts[class_id] += np.sum(mask == class_id)
-
-    total_pixels = np.sum(class_pixel_counts)
-    class_freqs = class_pixel_counts / total_pixels
-
-    # Formula del paper ENet (Weighted Cross Entropy)
-    weights = 1.0 / (np.log(1.02 + class_freqs))
-    return torch.FloatTensor(weights)
-
 def compute_miou(preds, labels, num_classes=19, ignore_index=255):
-    """
-    Calcola la mean Intersection over Union (mIoU).
-    preds: Tensor [N, H, W] - predizioni per pixel (classe)
-    labels: Tensor [N, H, W] - ground truth per pixel
-    """
     ious = []
     preds = preds.cpu().numpy()
     labels = labels.cpu().numpy()
@@ -58,7 +37,6 @@ def compute_miou(preds, labels, num_classes=19, ignore_index=255):
         union = np.logical_or(pred_inds, label_inds).sum()
 
         if union == 0:
-            # Classe non presente in questo batch
             continue
         iou = intersection / union
         ious.append(iou)
@@ -124,7 +102,6 @@ def validate(model, val_loader, criterion, device, num_classes=19):
 
     acc = 100. * correct / total
     mean_iou = 100. * (miou_total / count) if count > 0 else 0
-
     print(f'Validation - Loss: {val_loss / len(val_loader):.4f} - Acc: {acc:.2f}% - mIoU: {mean_iou:.2f}%')
     return acc, mean_iou
 
@@ -137,25 +114,21 @@ def find_folder(start_path, folder_name):
 
 
 if _name_ == "_main_":
-    print(">>> Avvio training...")
+    print(">>>Training...")
 
     zip_path = 'cityscapes_dataset.zip'
     base_extract_path = './Cityscapes'
 
     if not os.path.exists(base_extract_path):
-        print(" Dataset non trovato o incompleto, lo scarico...")
         os.system(f"gdown https://drive.google.com/uc?id=1Qb4UrNsjvlU-wEsR9d7rckB0YS_LXgb2 -O {zip_path}")
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(base_extract_path)
-        print(" Estrazione completata.")
-    else:
-        print(" Dataset già presente.")
 
     images_dir = find_folder(base_extract_path, 'images')
     masks_dir = find_folder(base_extract_path, 'gtFine')
 
     if not images_dir or not masks_dir:
-        raise RuntimeError("'images' o 'gtFine' non trovati dopo l’estrazione!")
+        raise RuntimeError("'images' o 'gtFine' not found!")
 
     train_images_dir = os.path.join(images_dir, 'train')
     val_images_dir = os.path.join(images_dir, 'val')
@@ -190,7 +163,7 @@ if _name_ == "_main_":
     lr= 0.01
     bs= 4
 
-    print(f"\n>>> Inizio training con lr={lr}, batch_size={bs}")
+    print(f"\n>>>Training con lr={lr}, batch_size={bs}")
     
     train_loader = DataLoader(train_dataset, batch_size=bs, shuffle=True,
                               num_workers=6, pin_memory=True)  
@@ -198,11 +171,6 @@ if _name_ == "_main_":
                             num_workers=6, pin_memory=True)
 
     model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
-    # trainid_mask_dir = "./tmp/GTA5/GTA5/labels_trainid"
-    # class_weights = compute_class_weights(trainid_mask_dir).to(device)
-
-    # Crea la loss pesata
-    # criterion = nn.CrossEntropyLoss(weight=class_weights, ignore_index=255)
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     optimizer = optim.SGD(model.parameters(), lr=lr, momentum=0.9, weight_decay=5e-4)
 
@@ -221,7 +189,7 @@ if _name_ == "_main_":
         if val_miou > best_miou:
             best_miou = val_miou
             torch.save(model.state_dict(), 'checkpoints_bisenet/bisenetbest_model.pth')
-            print(f"Nuovo best model con mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
+            print(f"Best model -> mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
 
     torch.save(model.state_dict(), f'checkpoints_bisenet/bisenetfinal_model_lr{lr}_bs{bs}.pth')
-    print(f"Fine training per lr={lr}, bs={bs} | Best mIoU: {best_miou:.2f}%")
+    print(f"TRAINING COMPLETED  lr={lr}, bs={bs} | Best mIoU: {best_miou:.2f}%")
