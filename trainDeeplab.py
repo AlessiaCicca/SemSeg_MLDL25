@@ -1,8 +1,6 @@
 import os
 import zipfile
-import shutil
 import gc
-from glob import glob
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -174,7 +172,7 @@ if __name__ == "__main__":
             for epoch in range(num_epochs):
                 print(f"\nEpoch {epoch+1}/{num_epochs}")
                 train(epoch, model, train_loader, criterion, optimizer, device)
-                val_acc = validate(model, val_loader, criterion, device)
+                val_acc,val_miou = validate(model, val_loader, criterion, device)
 
                 if epoch % 10 == 0 or epoch == num_epochs - 1:
                     torch.save(model.state_dict(), f'checkpoints/checkpoint_epoch_{epoch}_lr{lr}_bs{bs}.pth')
