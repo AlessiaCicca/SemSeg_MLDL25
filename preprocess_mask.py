@@ -2,14 +2,9 @@ import os
 from PIL import Image
 import numpy as np
 from glob import glob
-from tqdm import tqdm  # barra di progresso, opzionale
+from tqdm import tqdm 
 
-
-
-#SISTEMARE IN MODO CHE VENGA CHIAMATA IN AUTOMATICO
-
-
-# Mappa RGB -> trainId
+# Map RGB -> trainId
 rgb_to_trainid = {
     (128, 64,128): 0,   # road
     (244, 35,232): 1,   # sidewalk
@@ -32,7 +27,7 @@ rgb_to_trainid = {
     (119, 11, 32): 18,  # bicycle
 }
 
-# Prepara lookup rapido per RGB->trainId
+
 lookup = np.ones((256, 256, 256), dtype=np.uint8) * 255  # default ignore 255
 for rgb, train_id in rgb_to_trainid.items():
     lookup[rgb] = train_id
@@ -45,8 +40,8 @@ def convert_mask_rgb_to_trainid(mask_path, save_path):
     trainid_img.save(save_path)
 
 if __name__ == "__main__":
-    masks_dir = "./tmp/GTA5/GTA5/labels"  # cartella maschere RGB originali
-    output_dir = "./tmp/GTA5/GTA5/labels_trainid"  # dove salvare maschere preprocessate
+    masks_dir = "./tmp/GTA5/GTA5/labels"  #original folder
+    output_dir = "./tmp/GTA5/GTA5/labels_trainid"  #new folder
 
     os.makedirs(output_dir, exist_ok=True)
 
@@ -57,6 +52,6 @@ if __name__ == "__main__":
         save_path = os.path.join(output_dir, filename)
         convert_mask_rgb_to_trainid(mask_file, save_path)
 
-    print("Preprocessing maschere completato!")
+    print("Preprocessing completed!")
 
 
