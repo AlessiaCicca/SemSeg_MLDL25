@@ -8,7 +8,8 @@ This document is intended to guide users through the repository structure and pr
 
 SemSeg_MLDL25/
 │
-├── datasets/                         
+├── datasets/  
+
 │   ├── cityscapes.py               # Cityscapes dataset loader
 │   └── gta5.py                     # GTA5 dataset loader
 │
