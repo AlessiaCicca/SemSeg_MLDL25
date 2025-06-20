@@ -147,7 +147,7 @@ def validate(model, val_loader, criterion, device, num_classes=19):
 # ----------------------
 # MAIN
 # ----------------------
-if __name__ == "_main_":
+if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn', force=True)
 
     print(">>> Avvio training...")
