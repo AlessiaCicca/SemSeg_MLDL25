@@ -148,7 +148,7 @@ if __name__ == "__main__":
         train_transform = CombinedAugmentation(base_train_dataset, use_flip=True, use_scale=False, use_crop=False, use_colorjitter=False, use_classmix=False,
                                                use_brightness=False, use_hue=False, use_gamma=False, use_saturation=False, use_contrast=False) # FLIP 
     else:
-        raise ValueError("Tipo non valido. Scegli da 1 a 5.")
+        raise ValueError("Parameter tipo not valid!")
 
     train_dataset = GTA5.GTA5(train_csv, base_extract_path, transform=train_transform,
                               target_transform=None, mask_preprocessed_dir=preprocessed_masks_dir)
