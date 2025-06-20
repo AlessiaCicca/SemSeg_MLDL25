@@ -1,7 +1,3 @@
-# MEAN INTERSECTION OVER UNION
-# The Intersection over Union (IoU) metric, also referred to as the Jaccard index,
-# quantifies the percent overlap between the target mask and the prediction output.
-
 import torch
 import numpy as np
 import time
@@ -9,10 +5,6 @@ from torch.utils.data import DataLoader
 from models.deeplabv2.deeplabv2 import get_deeplab_v2
 import datasets.cityscapes as cityscapes
 from fvcore.nn import FlopCountAnalysis, flop_count_table
-
-
-#DICE The IoU score is calculated for each class separately and then averaged over all classes to provide a global,
-#mean IoU score of our semantic segmentation prediction.
 
 id_to_class_name = {
     0: 'road',
@@ -72,7 +64,7 @@ def evaluate_model(model, outputs, masks, input_size=(224, 224), iterations=1000
 
     mean_iou, class_ious = calculate_mean_iou_per_class(preds, gts, num_classes=19)
 
-    print(f"\nMean IoU (per class average): {mean_iou:.4f}")
+    print(f"\nMean IoU (for class average): {mean_iou:.4f}")
     print("IoU per classe:")
     for cls_id, iou in enumerate(class_ious):
         class_name = id_to_class_name.get(cls_id, f"Class {cls_id}")
@@ -136,11 +128,7 @@ if __name__ == "__main__":
     val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2)
     model = get_deeplab_v2(num_classes=19).to(device)
     model.load_state_dict(torch.load('checkpoints/best_model.pth', map_location=device))
-
-   
     model.eval()
-
-
     with torch.no_grad():
         for inputs, targets in val_loader:
             inputs, targets = inputs.to(device), targets.to(device)
