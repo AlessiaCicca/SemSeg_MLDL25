@@ -193,49 +193,43 @@ if _name_ == "_main_":
     num_epochs = 50
     initial_lr = 2.5e-5
     class_weights = compute_class_weights(preprocessed_masks_dir).to(device)
-    lambda_adv_list = [0.001]
-    use_weighted_bce_options = [False]
+    lambda_adv = 0.001
 
-    for use_weighted_bce in use_weighted_bce_options:
-        for lambda_adv in lambda_adv_list:
-            for loss_name, criterion_fn in criterion_options.items():
-                print(f"\n====== Esperimento: lambda_adv={lambda_adv}, loss={loss_name}, BCE weighted={use_weighted_bce} ======")
+    for loss_name, criterion_fn in criterion_options.items():
+        print(f"\nTraining with loss={loss_name}")
 
-                model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
-                discriminator = FCDiscriminator(num_classes=19).to(device)
+        model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
+        discriminator = FCDiscriminator(num_classes=19).to(device)
 
-                optimizer = optim.SGD(model.parameters(), lr=initial_lr, momentum=0.9, weight_decay=1e-4, nesterov=True)
-                optimizer_disc = optim.Adam(discriminator.parameters(), lr=1e-4, betas=(0.9, 0.99))
+        optimizer = optim.SGD(model.parameters(), lr=initial_lr, momentum=0.9, weight_decay=1e-4, nesterov=True)
+        optimizer_disc = optim.Adam(discriminator.parameters(), lr=1e-4, betas=(0.9, 0.99))
 
-                scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: (1 - epoch / num_epochs) ** 0.9)
-                scheduler_disc = optim.lr_scheduler.LambdaLR(optimizer_disc, lr_lambda=lambda epoch: (1 - epoch / num_epochs) ** 0.9)
+        scheduler = optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda epoch: (1 - epoch / num_epochs) ** 0.9)
+        scheduler_disc = optim.lr_scheduler.LambdaLR(optimizer_disc, lr_lambda=lambda epoch: (1 - epoch / num_epochs) ** 0.9)
 
-                criterion = criterion_fn(class_weights, ignore_index=255).to(device)
+        criterion = criterion_fn(class_weights, ignore_index=255).to(device)
 
-                if use_weighted_bce:
-                    pos_weight = torch.tensor([2.0]).to(device)
-                    criterion_ad = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
-                else:
-                    criterion_ad = nn.BCEWithLogitsLoss()
+       
+        criterion_ad = nn.BCEWithLogitsLoss()
 
-                best_miou = 0
-                exp_name = f"lambda{lambda_adv}_loss{loss_name}_BCEweighted{use_weighted_bce}"
-                exp_ckpt_dir = os.path.join("checkpoints_ce", exp_name)
-                os.makedirs(exp_ckpt_dir, exist_ok=True)
+        best_miou = 0
+        exp_name = f"lambda{lambda_adv}_loss{loss_name}_BCEweighted{use_weighted_bce}"
+        exp_ckpt_dir = os.path.join("checkpoints_ce", exp_name)
+        os.makedirs(exp_ckpt_dir, exist_ok=True)
 
-                for epoch in range(num_epochs):
-                    print(f"\n[Exp: {exp_name}] Epoch {epoch+1}/{num_epochs}")
-                    train_adapt(epoch, model, discriminator, train_loader, target_loader,
-                                criterion, criterion_ad, optimizer, optimizer_disc, device, lambda_adv)
-                    val_acc, val_miou = validate(model, val_loader, criterion, device)
+        for epoch in range(num_epochs):
+            print(f"\n[Exp: {exp_name}] Epoch {epoch+1}/{num_epochs}")
+            train_adapt(epoch, model, discriminator, train_loader, target_loader,
+                        criterion, criterion_ad, optimizer, optimizer_disc, device, lambda_adv)
+            val_acc, val_miou = validate(model, val_loader, criterion, device)
 
-                    if val_miou > best_miou:
-                        best_miou = val_miou
-                        torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'best_model_ce.pth'))
-                        print(f" Nuovo best model con mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
+            if val_miou > best_miou:
+                best_miou = val_miou
+                torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'best_model_ce.pth'))
+                print(f" Nuovo best model con mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
 
-                    scheduler.step()
-                    scheduler_disc.step()
+            scheduler.step()
+            scheduler_disc.step()
 
-                torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'final_model_ce.pth'))
-                print(f" Fine esperimento: {exp_name} | Best mIoU: {best_miou:.2f}%")
+        torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'final_model_ce.pth'))
+        print(f" Training completed: {exp_name} | Best mIoU: {best_miou:.2f}%")
