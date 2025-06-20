@@ -123,6 +123,10 @@ if _name_ == "_main_":
     train_csv = 'train_gta5_annotations.csv'
     val_csv = 'val_gta5_annotations.csv'
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
+    result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
+    print("Output preprocess_mask.py:\n", result.stdout)
+    if result.stderr:
+        print("Error preprocess_mask.py:\n", result.stderr)
     preprocessed_masks_dir = './tmp/GTA5/GTA5/labels_trainid'
 
     base_train_dataset = GTA5.GTA5(train_csv, base_extract_path, transform=None,
