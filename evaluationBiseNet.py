@@ -2,7 +2,6 @@ import torch
 import numpy as np
 import time
 from torch.utils.data import DataLoader
-from models.deeplabv2.deeplabv2 import get_deeplab_v2
 import datasets.cityscapes as cityscapes
 from fvcore.nn import FlopCountAnalysis, flop_count_table
 from models.bisenet.build_bisenet import BiSeNet
