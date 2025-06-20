@@ -182,7 +182,7 @@ if __name__ == "__main__":
                     best_miou = val_miou
                     best_lr=lr
                     best_bs=bs
-                    torch.save(model.state_dict(), f'checkpoints/best_model_lr{lr}_bs{bs}.pth)
+                    torch.save(model.state_dict(), f'checkpoints/best_model_lr{lr}_bs{bs}.pth')
                     print(f"Best model -> mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
                     print(f"Nuovo best model con acc: {val_acc:.2f}%")
 
