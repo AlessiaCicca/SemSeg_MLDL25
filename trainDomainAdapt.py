@@ -1,6 +1,5 @@
 import os
 import zipfile
-import shutil
 import gc
 from glob import glob
 import torch
@@ -13,7 +12,7 @@ from PIL import Image
 from tqdm import tqdm
 import numpy as np
 import torch.nn.functional as F
-
+import subprocess
 from focalLoss import FocalLossMulticlass
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5 as GTA5
@@ -148,7 +147,7 @@ def validate(model, val_loader, criterion, device, num_classes=19):
 # ----------------------
 # MAIN
 # ----------------------
-if _name_ == "_main_":
+if __name__ == "_main_":
     torch.multiprocessing.set_start_method('spawn', force=True)
 
     print(">>> Avvio training...")
@@ -217,7 +216,7 @@ if _name_ == "_main_":
         criterion_ad = nn.BCEWithLogitsLoss()
 
         best_miou = 0
-        exp_name = f"lambda{lambda_adv}_loss{loss_name}_BCEweighted{use_weighted_bce}"
+        exp_name = f"loss_{loss_name}"
         exp_ckpt_dir = os.path.join("checkpoints_ce", exp_name)
         os.makedirs(exp_ckpt_dir, exist_ok=True)
 
