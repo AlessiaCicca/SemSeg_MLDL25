@@ -14,7 +14,6 @@ from PIL import Image
 from tqdm import tqdm
 import numpy as np
 from models.bisenet.build_bisenet import BiSeNet
-import datasets.gta5 as GTA5
 import datasets.cityscapes as cityscapes
 
 #TRAIN 2B
