@@ -16,28 +16,11 @@ import torch.nn.functional as F
 
 from binaryfocal import FocalLossMulticlass
 from models.bisenet.build_bisenet import BiSeNet
-import datasets.gta5WithoutRGB as GTA5
-from augDoppioDA import CombinedAugmentation, val_transform_fn, val_transform_fn_no_mask
-import cityscapesDA as cityscapes
+import datasets.gta5 as GTA5
+from augmentation import CombinedAugmentation, val_transform_fn, val_transform_fn_no_mask
+import datasets.cityscapes as cityscapes
 from discriminator import FCDiscriminator
 
-# ----------------------
-# Losses e Metriche
-# ----------------------
-class DiceLoss(nn.Module):
-    def _init_(self, smooth=1e-6):
-        super()._init_()
-        self.smooth = smooth
-
-    def forward(self, inputs, targets):
-        num_classes = inputs.shape[1]
-        targets_one_hot = F.one_hot(targets, num_classes).permute(0, 3, 1, 2).float()
-        inputs_soft = F.softmax(inputs, dim=1)
-        dims = (0, 2, 3)
-        intersection = torch.sum(inputs_soft * targets_one_hot, dims)
-        union = torch.sum(inputs_soft + targets_one_hot, dims)
-        dice = (2. * intersection + self.smooth) / (union + self.smooth)
-        return 1 - dice.mean()
 
 criterion_options = {
     "CrossEntropy": lambda class_weights, ignore_index: nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_index),
@@ -159,7 +142,7 @@ def validate(model, val_loader, criterion, device, num_classes=19):
 
     acc = 100. * correct / total
     mean_iou = 100. * (miou_total / count) if count > 0 else 0
-    print(f'Validation - Loss: {val_loss / len(val_loader):.4f} - Acc: {acc:.2f}% - mIoU: {mean_iou:.2f}%')
+    print(f'Validation on Gta5- Loss: {val_loss / len(val_loader):.4f} - Acc: {acc:.2f}% - mIoU: {mean_iou:.2f}%')
     return acc, mean_iou
 
 # ----------------------
