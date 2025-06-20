@@ -149,5 +149,5 @@ def create_csv_no_labels(images_dir, output_csv):
         writer.writerow(['image'])
         for img_path in image_files:
             writer.writerow([img_path])
-    print(f"Created CSV file with {len(data)} pairs: {output_csv}")
+    print(f"Created CSV file with {len(image_files)} pairs: {output_csv}")
 
