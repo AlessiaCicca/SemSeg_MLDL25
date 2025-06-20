@@ -16,8 +16,8 @@ from tqdm import tqdm
 import numpy as np
 
 from models.bisenet.build_bisenet import BiSeNet
-import datasets.gta5WithoutRGB as GTA5
-from augDoppio import CombinedAugmentation, val_transform_fn
+import datasets.gta5 as GTA5
+from augmentation import CombinedAugmentation, val_transform_fn
 
 scaler = GradScaler()
 
@@ -99,7 +99,7 @@ def find_folder(start_path, folder_name):
     return None
 
 if _name_ == "_main_":
-    print(">>> Avvio training...")
+    print(">>>Training...")
     tipo = 1
     base_extract_path = './tmp/GTA5'
     zip_path = 'gt5_dataset.zip'
@@ -107,16 +107,16 @@ if _name_ == "_main_":
     gdown_url = f"https://drive.google.com/uc?id={gdrive_id}"
 
     if not os.path.exists(base_extract_path):
-        print("Scarico il dataset...")
+        print("Download dataset...")
         gdown.download(gdown_url, zip_path, quiet=False)
         if zipfile.is_zipfile(zip_path):
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(base_extract_path)
         else:
-            print("Errore nel file ZIP.")
+            print("Error.")
             os.remove(zip_path)
     else:
-        print(" Dataset già presente.")
+        print(" Dataset already present.")
 
     train_images_dir = find_folder(base_extract_path, 'images')
     train_masks_dir = find_folder(base_extract_path, 'labels')
@@ -179,11 +179,3 @@ if _name_ == "_main_":
             torch.save(model.state_dict(), f'checkpoints_aug/best_model_type_cs2.pth')
 
     torch.save(model.state_dict(), f'checkpoints_aug/final_model_type_cs2.pth')
-
-    # Log automatico dei risultati
-    with open('logs_aug/risultati.csv', mode='a', newline='') as file:
-        writer = csv.writer(file)
-        if os.stat('logs_aug/risultati.csv').st_size == 0:
-            writer.writerow(['Tipo', 'mIoU', 'Accuratezza'])
-        writer.writerow(["flip", f"{best_miou:.2f}", f"{val_acc:.2f}"])
-    print(f" Log salvato in logs_aug/risultati.csv")
