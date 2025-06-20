@@ -23,7 +23,7 @@ class GTA5(Dataset):
     def __len__(self):
         return len(self.img_labels)
 
-     def __getitem__(self, idx):
+    def __getitem__(self, idx):
       img_path = os.path.join(self.root_dir, self.img_labels.iloc[idx, 0])
 
       if self.mask_preprocessed_dir:
