@@ -14,11 +14,12 @@ from sklearn.model_selection import train_test_split
 
 
 class GTA5(Dataset):
-    def __init__(self, annotations_file, root_dir, transform=None, target_transform=None):
+    def __init__(self, annotations_file, root_dir, transform=None, target_transform=None, mask_preprocessed_dir=None):
         self.img_labels = pd.read_csv(annotations_file)
         self.root_dir = root_dir
         self.transform = transform
         self.target_transform = target_transform
+        self.mask_preprocessed_dir = mask_preprocessed_dir 
 
     def __len__(self):
         return len(self.img_labels)
