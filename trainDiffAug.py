@@ -14,7 +14,7 @@ import sys
 from PIL import Image
 from tqdm import tqdm
 import numpy as np
-
+import subprocess
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5 as GTA5
 from augmentation import CombinedAugmentation, val_transform_fn
@@ -98,7 +98,7 @@ def find_folder(start_path, folder_name):
             return os.path.join(root, folder_name)
     return None
 
-if _name_ == "_main_":
+if __name__ == "_main_":
     print(">>>Training...")
     tipo = 1
     base_extract_path = './tmp/GTA5'
@@ -183,3 +183,5 @@ if _name_ == "_main_":
             torch.save(model.state_dict(), f'checkpoints_aug/best_model_type_cs2.pth')
 
     torch.save(model.state_dict(), f'checkpoints_aug/final_model_type_cs2.pth')
+    print(f"New best model saved with mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
+
