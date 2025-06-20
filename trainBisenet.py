@@ -1,17 +1,12 @@
 import os
 import zipfile
-import shutil
 import gc
-from glob import glob
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 from torch.amp import autocast, GradScaler  
 import gdown
-import time
-from PIL import Image
-from tqdm import tqdm
 import numpy as np
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.cityscapes as cityscapes
