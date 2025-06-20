@@ -1,7 +1,7 @@
 import torch.nn as nn
 
 class FCDiscriminator(nn.Module):
-    def _init_(self, num_classes, ndf=32):
+    def __init__(self, num_classes, ndf=32):
         super(FCDiscriminator, self)._init_()
 
         self.model = nn.Sequential(
