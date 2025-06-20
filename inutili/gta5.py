@@ -12,7 +12,7 @@ import csv
 import numpy as np
 from sklearn.model_selection import train_test_split
 
-# Esempio di mappatura RGB → trainId (personalizzalo per il tuo dataset)
+#Map RGB → trainId 
 rgb_to_trainid = {
     (128, 64,128): 0,   # road
     (244, 35,232): 1,   # sidewalk
@@ -49,24 +49,21 @@ class GTA5(Dataset):
         img_path = os.path.join(self.root_dir, self.img_labels.iloc[idx, 0])
         mask_path = os.path.join(self.root_dir, self.img_labels.iloc[idx, 1])
 
-        # Carica immagine RGB
+       
         image = Image.open(img_path).convert("RGB")
-
-        # Carica maschera RGB
+        
         mask = Image.open(mask_path).convert("RGB")
         mask = np.array(mask)
 
-        # Mappa RGB → trainId
         h, w, _ = mask.shape
         new_mask = np.ones((h, w), dtype=np.uint8) * 255  # default = ignore
         for rgb, train_id in rgb_to_trainid.items():
             matches = np.all(mask == rgb, axis=-1)
             new_mask[matches] = train_id
 
-        # Converti maschera in PIL Image per compatibilità con Resize, PILToTensor
+    
         mask = Image.fromarray(new_mask)
 
-        # Applica trasformazioni
         if self.transform:
             image = self.transform(image)
         if self.target_transform:
@@ -76,38 +73,23 @@ class GTA5(Dataset):
         mask = mask.long()
 
         return image, mask
-# ------------------------------
-# Scarica e prepara il dataset
-# ------------------------------
-# ------------------------------
-# Parametri dataset
-# ------------------------------
 
+#Download dataset
 extract_dir = r'.\\tmp\\GTA5'
 
-# ------------------------------
-# Funzione per cercare cartelle ricorsivamente
-# ------------------------------
 def find_folder(start_path, folder_name):
     for root, dirs, _ in os.walk(start_path):
         if folder_name in dirs:
             return os.path.join(root, folder_name)
     return None
 
-# ------------------------------
-# Scarica ed estrai il dataset
-# ------------------------------
 if not os.path.exists(extract_dir) or not find_folder(extract_dir, 'images') or not find_folder(extract_dir, 'labels'):
-
-    print("Dataset non presente")
+    print("Dataset present")
 else:
-    print("✅ Dataset già presente.")
+    print("Dataset not present")
 
-# ------------------------------
-# Trasformazioni
-# ------------------------------
+#Trasforamtion
 
-# VALUTARE SE EFFETTUARE ALTRE TRASFORMAZIONI
 transform = {
     'image': transforms.Compose([
         Resize((512, 1024)),
@@ -121,53 +103,25 @@ transform = {
     ])
 }
 
-# ------------------------------
-# Crea CSV con immagini e maschere - images_dir, masks_dir, output_csv, root_dir
 
-'''
-riadatto la funzione per creare i file csv partendo dal training set
-
-- spitto il traning set
-- creo i file csv dalle partizioni train + val
-
-
-'''
 def split_train_val_gta5(image_files, masks_dir, root_dir, data):
 
     for img_mask_path in image_files:
 
-        '''print ('sono dentro il primo for')
-        basename = os.path.basename(img_path)
-        
-    
-        mask_path = os.path.join(masks_dir, basename)'''
-
-
-        #print ('prima di entrare nel for')
-
         if os.path.exists(img_mask_path[0]) and os.path.exists(img_mask_path[1]):
-
-           # print('sono dentro il for')
-            # Percorsi relativi rispetto alla root del dataset
             img_rel = os.path.relpath(img_mask_path[0], root_dir)
             mask_rel_val = os.path.relpath(img_mask_path[1], root_dir)
-
-
             data.append([img_rel, mask_rel_val])
-
-            #print('dati appesi')
         else:
-            print(f"[WARNING] Maschera mancante per {img_mask_path[0]} o {img_mask_path[1]}")
+            print(f"[WARNING] There isn't a mask for {img_mask_path[0]} or {img_mask_path[1]}")
 
 
-# ------------------------------
+
 def create_gta5_csv(images_dir, masks_dir, output_train_csv, output_val_csv, root_dir):
 
     print('gta5_dir : ', images_dir)
     image_files = glob(os.path.join(images_dir, '**', '*.png'), recursive=True)
     masks_files = glob(os.path.join(masks_dir, "**", "*.png"), recursive=True)
-
-    # coverto in dataframe
 
     image_files = pd.DataFrame(image_files)
     masks_files = pd.DataFrame(masks_files)
@@ -184,16 +138,16 @@ def create_gta5_csv(images_dir, masks_dir, output_train_csv, output_val_csv, roo
 
     print(f"Trovate {len(image_files)} immagini.")
 
-    # ciclo per il train
+    #Train
     split_train_val_gta5(files_train, masks_dir, root_dir, data_train)
 
-    #ciclo per il val
+    #Validation
     split_train_val_gta5(files_val, masks_dir, root_dir, data_val)
 
         
 
     if len(data_train) == 0 or len(data_val) == 0:
-        print("[ERROR] Nessuna coppia trovata!")
+        print("[ERROR] No pairs found!")
     
 
     with open(output_train_csv, mode='w', newline='') as f:
@@ -207,6 +161,6 @@ def create_gta5_csv(images_dir, masks_dir, output_train_csv, output_val_csv, roo
         writer.writerow(['image', 'mask'])
         writer.writerows(data_val)
 
-    print(f"Creato CSV con {len(data_train)} coppie: {output_train_csv}")
-    print(f"Creato CSV con {len(data_val)} coppie: {output_val_csv}")
+    print(f"Created CSV file with {len(data_train)} pairs: {output_train_csv}")
+    print(f"Created CSV file with {len(data_val)} pairs: {output_val_csv}")
 
