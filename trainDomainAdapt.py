@@ -14,7 +14,7 @@ from tqdm import tqdm
 import numpy as np
 import torch.nn.functional as F
 
-from binaryfocal import FocalLossMulticlass
+from focalLoss import FocalLossMulticlass
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.gta5 as GTA5
 from augmentation import CombinedAugmentation, val_transform_fn, val_transform_fn_no_mask
