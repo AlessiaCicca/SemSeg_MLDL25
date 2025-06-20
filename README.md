@@ -7,12 +7,17 @@ This document is intended to guide users through the repository structure and pr
 ## Project Structure
 
 SemSeg_MLDL25/
+
 │
+
 ├── datasets/  
 
 │   ├── cityscapes.py               # Cityscapes dataset loader
+
 │   └── gta5.py                     # GTA5 dataset loader
+
 │
+
 ├── models/                          # Network architectures
 │   ├── bisenet/
 │   │   ├── build_bisenet.py        # Constructs the BiSeNet model
