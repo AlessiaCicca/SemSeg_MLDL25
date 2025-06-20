@@ -118,7 +118,7 @@ def train_adapt(epoch, model, discriminator, train_loader, target_loader,
         torch.cuda.empty_cache()
 
     acc = 100. * correct / total
-    print(f"Train Epoch {epoch} - SegLoss: {running_seg/len(train_loader):.4f} - AdvLoss: {running_adv/len(train_loader):.4f} - DLoss: {running_D/len(train_loader):.4f} - Acc: {acc:.2f}%")
+    print(f"Train Epoch {epoch+1} - SegLoss: {running_seg/len(train_loader):.4f} - AdvLoss: {running_adv/len(train_loader):.4f} - DLoss: {running_D/len(train_loader):.4f} - Acc: {acc:.2f}%")
 
 def validate(model, val_loader, criterion, device, num_classes=19):
     model.eval()
