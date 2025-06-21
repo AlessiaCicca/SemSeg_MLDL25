@@ -79,9 +79,17 @@ SemSeg_MLDL25/
 ├── evaluationBiseNet.py            # Evaluation script for BiSe
 
 ---
+## Extension
+
+Our extension involves several techniques aimed at improving the recognition of rare classes and is fully integrated into the project. In particular, it introduces class mix within the augmentation process, as well as the use of specific entropy measures both during augmentation and domain adaptation phases. Additionally, a targeted pretraining approach is implemented to further enhance the model’s ability to accurately recognize less frequent classes
+
+---
 ## Prerequisites
 
 The `fvcore` library is required to the evaluation step. You can install it using pip:
 
 ```bash
 !pip install -U fvcore
+
+---
+.
