@@ -240,7 +240,12 @@ class CombinedAugmentation:
         target_size = self.crop_size
         image = resize(image, target_size[::-1])
         mask = resize(mask, target_size[::-1], interpolation=InterpolationMode.NEAREST)
-       
+
+        '''
+        If the image or mask is smaller than the desired crop size, it enlarges it while maintaining a 
+        discrete proportion for the mask, so that cropping can then be done without problems.
+
+        '''
         if image.width < self.crop_size[1] or image.height < self.crop_size[0]:
             new_w = max(image.width, self.crop_size[1])
             new_h = max(image.height, self.crop_size[0])
