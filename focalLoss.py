@@ -15,7 +15,10 @@ class FocalLossMulticlass(nn.Module):
         self.reduction = reduction
 
     def forward(self, input, target):
-        # Reshape input and target for pixel-wise loss calculation
+       
+        #This block of code is responsible for transforming the input and target tensors from a format typical of image segmentation tasks 
+        #to a format suitable for "pixel-wise" (or point-wise) loss calculation.
+        
         if input.dim() > 2:
             input = input.permute(0, 2, 3, 1).contiguous()  # [B, H, W, C]
             input = input.view(-1, input.size(-1))          # [B*H*W, C]
