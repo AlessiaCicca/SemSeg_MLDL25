@@ -140,7 +140,7 @@ def create_cityscapes_csv(images_dir, masks_dir, output_csv, root_dir):
     print(f"Created CSV file with {len(data)} pairs: {output_csv}")
 
 def create_csv_no_labels(images_dir, output_csv):
-    image_files = glob(os.path.join(images_dir, '*', '_leftImg8bit.png'), recursive=True)
+    image_files = glob(os.path.join(images_dir, '**', '*_leftImg8bit.png'), recursive=True)
     print(f"There are {len(image_files)} images.")
     if len(image_files) == 0:
         print("[ERROR] No pairs (images-mask) found!")
