@@ -17,6 +17,24 @@ scaler = GradScaler()
 
 
 def compute_miou(preds, labels, num_classes=19, ignore_index=255):
+    """
+    Computes the mean Intersection over Union (mIoU) metric.
+
+    Args:
+        preds (Tensor): Predicted class indices for each pixel.
+        labels (Tensor): Ground truth class indices for each pixel.
+        num_classes (int): Number of valid classes (default: 19).
+        ignore_index (int): Class index to ignore during evaluation (default: 255).
+
+    Returns:
+        float: Mean IoU across all valid classes.
+    
+    This function converts predictions and labels to NumPy arrays and iterates over each class.
+    For each class, it computes the intersection and union of predicted and true pixels.
+    The IoU for a class is defined as the ratio of intersection over union.
+    The final mIoU is the mean of IoUs for all classes present in the evaluation.
+
+    """
     ious = []
     preds = preds.cpu().numpy()
     labels = labels.cpu().numpy()
@@ -40,6 +58,22 @@ def compute_miou(preds, labels, num_classes=19, ignore_index=255):
     return np.mean(ious)
 
 def train(epoch, model, train_loader, criterion, optimizer, device):
+    """
+    Runs a single training epoch.
+
+    Args:
+        epoch : Current epoch index (starting from 0).
+        model : The model to be trained.
+        train_loader : DataLoader providing the training data batches.
+        criterion : Loss function used to compute the training loss.
+        optimizer : Optimizer used to update model parameters.
+        device : The device on which computations are performed (CPU or GPU).
+
+    This function iterates over the training DataLoader, performs forward passes,
+    computes the loss, executes backpropagation, updates the model weights,
+    and accumulates accuracy metrics over the epoch.
+
+    """
     model.train()
     running_loss, correct, total = 0.0, 0, 0
 
@@ -70,6 +104,23 @@ def train(epoch, model, train_loader, criterion, optimizer, device):
 
 
 def validate(model, val_loader, criterion, device, num_classes=19):
+
+    """
+    Performs model evaluation on the validation dataset.
+
+    Args:
+        model : The model to be evaluated.
+        val_loader : DataLoader providing the validation data batches.
+        criterion : Loss function used to compute the validation loss.
+        device : The device on which computations are performed (CPU or GPU).
+        num_classes : Number of valid classes for evaluation (default: 19).
+
+    This function sets the model to evaluation mode and disables gradient computation.
+    It iterates over the validation DataLoader, computes predictions, loss,
+    and evaluation metrics including accuracy and mean Intersection over Union (mIoU).
+
+    """
+    
     model.eval()
     val_loss, correct, total = 0, 0, 0
     miou_total = 0
@@ -101,6 +152,22 @@ def validate(model, val_loader, criterion, device, num_classes=19):
 
 
 def find_folder(start_path, folder_name):
+
+    """
+    Searches for a folder within a directory tree and returns its full path.
+
+    Args:
+        start_path : Root directory to start the search.
+        folder_name : Name of the target folder to locate.
+
+    Returns:
+        str or None: The full path to the folder if found, otherwise None.
+
+    This function recursively walks through the directory tree starting at start_path,
+    and returns the full path to the first occurrence of folder_name.
+
+    """
+
     for root, dirs, _ in os.walk(start_path):
         if folder_name in dirs:
             return os.path.join(root, folder_name)
@@ -109,6 +176,17 @@ def find_folder(start_path, folder_name):
 
 if __name__ == "__main__":
     print(">>>Training...")
+    
+    '''
+
+    Preliminary setup:
+     This initial part of the main function handles dataset retrieval and path construction.
+     If the dataset is not already present, it is downloaded and extracted.
+     The function then searches for the relevant image and mask directories,
+     builds the required paths for training and validation sets,
+     and generates CSV files containing image-label pairs for both sets.
+
+    '''
 
     zip_path = 'cityscapes_dataset.zip'
     base_extract_path = './Cityscapes'
@@ -170,6 +248,15 @@ if __name__ == "__main__":
 
     best_acc = 0
     best_miou = 0
+
+    '''
+    Main training and validation loop:
+     This loop iterates over all epochs. For each epoch, it performs a training pass
+     followed by validation. After validation, it checks the current mIoU value and 
+     tracks the best mIoU achieved so far. If a new best mIoU is found, the model 
+     checkpoint is saved. Additionally, periodic checkpoints are saved at fixed intervals.
+
+    '''
 
     for epoch in range(num_epochs):
         print(f"\nEpoch {epoch+1}/{num_epochs}")
