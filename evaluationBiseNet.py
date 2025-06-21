@@ -8,6 +8,7 @@ from fvcore.nn import FlopCountAnalysis, flop_count_table
 from models.bisenet.build_bisenet import BiSeNet
 import datasets.cityscapes as cityscapes
 
+# Dictionary mapping class ID (integer) to its corresponding semantic class name.
 id_to_class_name = {
     0: 'road', 1: 'sidewalk', 2: 'building', 3: 'wall', 4: 'fence',
     5: 'pole', 6: 'traffic light', 7: 'traffic sign', 8: 'vegetation',
@@ -16,6 +17,25 @@ id_to_class_name = {
 }
 
 def calculate_mean_iou_per_class(preds, gts, num_classes=19):
+
+    """
+    Computes the mean Intersection over Union (mIoU) and per-class IoU.
+
+    Args:
+        preds : List of predicted label maps (H, W) with class indices.
+        gts : List of ground truth label maps (H, W) with class indices.
+        num_classes : Number of valid classes (default: 19).
+
+    Returns:
+        tuple:
+            mean_iou : Mean IoU across all classes.
+            class_iou : Array containing the IoU for each class.
+
+    For each prediction and ground truth pair, this function computes the intersection 
+    and union for each class across all images. The IoU for each class is calculated as 
+    the ratio of intersection over union. The mean IoU is the average of the per-class IoUs.
+    
+    """
     intersection = np.zeros(num_classes)
     union = np.zeros(num_classes)
 
@@ -36,6 +56,27 @@ def calculate_mean_iou_per_class(preds, gts, num_classes=19):
     return mean_iou, class_iou
 
 def evaluate_model(model, val_loader, input_size=(512, 1024), iterations=100, device='cpu'):
+
+    """
+    Evaluates the model on a validation dataset and reports key performance metrics.
+
+    Args:
+        model : The neural network model to be evaluated.
+        val_loader : DataLoader providing validation data.
+        input_size : Input dimensions (height, width) for latency and FLOPs measurement.
+        iterations : Number of iterations for latency and FPS benchmarking.
+        device : The device on which computations are performed (CPU).
+
+    This function sets the model to evaluation mode and disables gradient computation.
+    It iterates through the validation data, collecting predictions and ground truths to compute:
+      - mean Intersection over Union (mIoU)
+      - per-class IoU
+    It also benchmarks:
+      - latency and frames per second (FPS) over the specified number of iterations
+      - FLOPs (floating-point operations) using FlopCountAnalysis
+      - total and trainable parameter counts
+    
+    """
     model.eval()
     model.to(device)
 
