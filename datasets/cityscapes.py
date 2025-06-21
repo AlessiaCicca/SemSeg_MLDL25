@@ -80,8 +80,7 @@ if not os.path.exists(extract_dir) or not find_folder(extract_dir, 'images') or 
         zip_ref.extractall(extract_dir)
 
     print("Download completed")
-else:
-    print("Dataset present!")
+
 
 
 extract_dir = './Cityscapes'
