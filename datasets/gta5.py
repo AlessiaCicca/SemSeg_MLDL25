@@ -43,7 +43,7 @@ class GTA5(Dataset):
       return image, mask
 
 #Download dataset
-extract_dir = r'.\\tmp\\GTA5'
+extract_dir = "/content/SemSeg_MLDL25/tmp/GTA5/GTA5"
 
 def find_folder(start_path, folder_name):
     for root, dirs, _ in os.walk(start_path):
@@ -52,9 +52,8 @@ def find_folder(start_path, folder_name):
     return None
 
 if not os.path.exists(extract_dir) or not find_folder(extract_dir, 'images') or not find_folder(extract_dir, 'labels'):
-    print("Dataset present")
-else:
     print("Dataset not present")
+
 
 #Trasforamtion
 
