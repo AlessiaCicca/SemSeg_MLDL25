@@ -111,16 +111,16 @@ def split_train_val_gta5(image_files, masks_dir, root_dir, data):
 #corresponding mask paths from the GTA5 dataset. It splits the dataset randomly but reproducibly (using a fixed seed).
 
 def create_gta5_csv(images_dir, masks_dir, output_train_csv, output_val_csv, root_dir):
-'''
-Inputs:
-
-images_dir: folder containing all the images.
-masks_dir: folder containing all the masks.
-output_train_csv: filename/path to save the training CSV.
-output_val_csv: filename/path to save the validation CSV.
-root_dir: root directory used to compute relative paths.
-
-'''
+    '''
+    Inputs:
+    
+    images_dir: folder containing all the images.
+    masks_dir: folder containing all the masks.
+    output_train_csv: filename/path to save the training CSV.
+    output_val_csv: filename/path to save the validation CSV.
+    root_dir: root directory used to compute relative paths.
+    
+    '''
     print('gta5_dir : ', images_dir)
     #Recursively searches for all PNG files in the images and masks folders and stores them in two lists.
     image_files = glob(os.path.join(images_dir, '**', '*.png'), recursive=True)
