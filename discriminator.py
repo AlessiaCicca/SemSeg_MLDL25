@@ -2,7 +2,7 @@ import torch.nn as nn
 
 class FCDiscriminator(nn.Module):
     def __init__(self, num_classes, ndf=32):
-        super(FCDiscriminator, self)._init_()
+        super(FCDiscriminator, self).__init__()
 
         self.model = nn.Sequential(
             nn.Conv2d(num_classes, ndf, kernel_size=4, stride=2, padding=1),
