@@ -29,7 +29,7 @@ criterion_options = {
 def compute_class_weights(label_dir, num_classes=19):
     class_pixel_counts = np.zeros(num_classes, dtype=np.int64)
     mask_paths = glob(os.path.join(label_dir, "*.png"))
-    for mask_path in tqdm(mask_paths, desc="Calcolo frequenze classi"):
+    for mask_path in tqdm(mask_paths, desc="Class frequency computation"):
         mask = np.array(Image.open(mask_path))
         for class_id in range(num_classes):
             class_pixel_counts[class_id] += np.sum(mask == class_id)
@@ -150,7 +150,7 @@ def validate(model, val_loader, criterion, device, num_classes=19):
 if __name__ == "__main__":
     torch.multiprocessing.set_start_method('spawn', force=True)
 
-    print(">>> Avvio training...")
+    print(">>> Training...")
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     os.makedirs('checkpoints_ce', exist_ok=True)
 
@@ -170,8 +170,6 @@ if __name__ == "__main__":
     val_csv = 'val_gta5_annotations.csv'
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
     result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
-    print("Output preprocess_mask.py:\n", result.stdout)
-     result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
     print("Output preprocess_mask.py:\n", result.stdout)
     if result.returncode != 0:
         print("Preprocess_mask.py failed:\n", result.stderr)
@@ -194,6 +192,7 @@ if __name__ == "__main__":
         annotations_file=target_csv,
         transform=val_transform_fn_no_mask
     )
+
 
 
     # === DataLoader
@@ -239,7 +238,7 @@ if __name__ == "__main__":
             if val_miou > best_miou:
                 best_miou = val_miou
                 torch.save(model.state_dict(), os.path.join(exp_ckpt_dir, 'best_model_ce.pth'))
-                print(f" Nuovo best model con mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
+                print(f" New best model with mIoU: {best_miou:.2f}% (Acc: {val_acc:.2f}%)")
 
             scheduler.step()
             scheduler_disc.step()
