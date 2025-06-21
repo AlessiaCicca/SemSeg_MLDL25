@@ -20,13 +20,35 @@ from augmentation import CombinedAugmentation, val_transform_fn, val_transform_f
 import datasets.cityscapes as cityscapes
 from discriminator import FCDiscriminator
 
-
+'''
+Dictionary of available loss function options.
+ Each entry maps a loss name to a lambda that initializes the corresponding loss function 
+ with class weights and ignore index as parameters.
+     - "CrossEntropy": Standard cross-entropy loss with class balancing.
+     - "FocalLoss": Focal loss for addressing class imbalance, with gamma=2.0.
+'''
 criterion_options = {
     "CrossEntropy": lambda class_weights, ignore_index: nn.CrossEntropyLoss(weight=class_weights, ignore_index=ignore_index),
      "FocalLoss": lambda class_weights, ignore_index: FocalLossMulticlass(gamma=2.0, weight=class_weights, ignore_index=255)
 }
 
 def compute_class_weights(label_dir, num_classes=19):
+    """
+    Computes class weights based on pixel frequency.
+
+    Args:
+        label_dir : Directory containing label masks (PNG files) where each pixel represents a class ID.
+        num_classes : Number of classes to consider (default: 19).
+
+    Returns:
+        torch.FloatTensor: Computed class weights as a 1D tensor of size (num_classes).
+
+    This function iterates over all mask files in the given directory and counts the number of pixels 
+    belonging to each class. It then computes the frequency of each class as the ratio between the 
+    number of pixels of that class and the total number of pixels. The class weight is calculated 
+    using the formula 1 / log(1.02 + class frequency).
+    
+    """
     class_pixel_counts = np.zeros(num_classes, dtype=np.int64)
     mask_paths = glob(os.path.join(label_dir, "*.png"))
     for mask_path in tqdm(mask_paths, desc="Class frequency computation"):
@@ -39,6 +61,24 @@ def compute_class_weights(label_dir, num_classes=19):
     return torch.FloatTensor(weights)
 
 def compute_miou(preds, labels, num_classes=19, ignore_index=255):
+    """
+    Computes the mean Intersection over Union (mIoU) metric.
+
+    Args:
+        preds (Tensor): Predicted class indices for each pixel.
+        labels (Tensor): Ground truth class indices for each pixel.
+        num_classes (int): Number of valid classes (default: 19).
+        ignore_index (int): Class index to ignore during evaluation (default: 255).
+
+    Returns:
+        float: Mean IoU across all valid classes.
+    
+    This function converts predictions and labels to NumPy arrays and iterates over each class.
+    For each class, it computes the intersection and union of predicted and true pixels.
+    The IoU for a class is defined as the ratio of intersection over union.
+    The final mIoU is the mean of IoUs for all classes present in the evaluation.
+
+    """
     ious = []
     preds = preds.cpu().numpy()
     labels = labels.cpu().numpy()
@@ -55,6 +95,20 @@ def compute_miou(preds, labels, num_classes=19, ignore_index=255):
     return np.mean(ious) if ious else 0.0
 
 def find_folder(start_path, folder_name):
+    """
+    Searches for a folder within a directory tree and returns its full path.
+
+    Args:
+        start_path : Root directory to start the search.
+        folder_name : Name of the target folder to locate.
+
+    Returns:
+        str or None: The full path to the folder if found, otherwise None.
+
+    This function recursively walks through the directory tree starting at start_path,
+    and returns the full path to the first occurrence of folder_name.
+
+    """
     for root, dirs, _ in os.walk(start_path):
         if folder_name in dirs:
             return os.path.join(root, folder_name)
@@ -65,6 +119,28 @@ def find_folder(start_path, folder_name):
 # ----------------------
 def train_adapt(epoch, model, discriminator, train_loader, target_loader,
                 criterion, criterion_adv, optimizer_G, optimizer_D, device, lambda_adv):
+    """
+    Performs a single training epoch with domain adaptation.
+
+    Args:
+        epoch : Current epoch index (starting from 0).
+        model : The segmentation network to be trained.
+        discriminator : The discriminator network used for domain adaptation.
+        train_loader : DataLoader providing source domain (labeled) data.
+        target_loader : DataLoader providing target domain (unlabeled) data.
+        criterion : Loss function for supervised segmentation.
+        criterion_adv : Adversarial loss function for domain adaptation.
+        optimizer_G : Optimizer for the segmentation network.
+        optimizer_D : Optimizer for the discriminator network.
+        device : Device on which computations are performed (CPU or GPU).
+        lambda_adv : Weighting factor for the adversarial loss term.
+
+    This function executes one training loop that combines supervised learning on the source domain
+    with adversarial domain adaptation. The discriminator guides the segmentation network to learn 
+    domain-invariant features by distinguishing source from target outputs, while the segmenter aims 
+    to fool the discriminator on target data.
+    
+    """
 
     model.train()
     discriminator.train()
@@ -121,6 +197,21 @@ def train_adapt(epoch, model, discriminator, train_loader, target_loader,
     print(f"Train Epoch {epoch+1} - SegLoss: {running_seg/len(train_loader):.4f} - AdvLoss: {running_adv/len(train_loader):.4f} - DLoss: {running_D/len(train_loader):.4f} - Acc: {acc:.2f}%")
 
 def validate(model, val_loader, criterion, device, num_classes=19):
+    """
+    Performs model evaluation on the validation dataset.
+
+    Args:
+        model : The model to be evaluated.
+        val_loader : DataLoader providing the validation data batches.
+        criterion : Loss function used to compute the validation loss.
+        device : The device on which computations are performed (CPU or GPU).
+        num_classes : Number of valid classes for evaluation (default: 19).
+
+    This function sets the model to evaluation mode and disables gradient computation.
+    It iterates over the validation DataLoader, computes predictions, loss,
+    and evaluation metrics including accuracy and mean Intersection over Union (mIoU).
+
+    """
     model.eval()
     val_loss, correct, total = 0, 0, 0
     miou_total = 0
