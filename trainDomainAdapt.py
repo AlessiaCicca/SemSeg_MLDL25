@@ -302,6 +302,8 @@ if __name__ == "__main__":
         print(f"\nTraining with loss={loss_name}")
 
         model = BiSeNet(num_classes=19, context_path='resnet18').to(device)
+        #LOADING OF PRETRAINED WEIGHT
+        #model.load_state_dict(torch.load(pretrained_path, map_location=device)) 
         discriminator = FCDiscriminator(num_classes=19).to(device)
 
         optimizer = optim.SGD(model.parameters(), lr=initial_lr, momentum=0.9, weight_decay=1e-4, nesterov=True)
