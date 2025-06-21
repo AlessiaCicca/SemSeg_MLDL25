@@ -124,7 +124,6 @@ def evaluate_model(model, val_loader, input_size=(512, 1024), iterations=100, de
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
-    # Stampa dei risultati
     print(f"\n=== MODEL EVALUATION RESULTS ===")
     print(f"Mean IoU (average over classes): {mean_iou:.4f}")
     print("IoU per classe:")
