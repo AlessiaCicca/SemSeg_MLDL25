@@ -22,6 +22,22 @@ from augmentation import CombinedAugmentation, val_transform_fn
 scaler = GradScaler()
 
 def compute_class_weights(label_dir, num_classes=19):
+    """
+    Computes class weights based on pixel frequency.
+
+    Args:
+        label_dir : Directory containing label masks (PNG files) where each pixel represents a class ID.
+        num_classes : Number of classes to consider (default: 19).
+
+    Returns:
+        torch.FloatTensor: Computed class weights as a 1D tensor of size (num_classes).
+
+    This function iterates over all mask files in the given directory and counts the number of pixels 
+    belonging to each class. It then computes the frequency of each class as the ratio between the 
+    number of pixels of that class and the total number of pixels. The class weight is calculated 
+    using the formula 1 / log(1.02 + class frequency).
+    
+    """
     class_pixel_counts = np.zeros(num_classes, dtype=np.int64)
     mask_paths = glob(os.path.join(label_dir, "*.png"))
     for mask_path in tqdm(mask_paths, desc="Calcolo frequenze classi"):
@@ -34,6 +50,24 @@ def compute_class_weights(label_dir, num_classes=19):
     return torch.FloatTensor(weights)
 
 def compute_miou(preds, labels, num_classes=19, ignore_index=255):
+    """
+    Computes the mean Intersection over Union (mIoU) metric.
+
+    Args:
+        preds (Tensor): Predicted class indices for each pixel.
+        labels (Tensor): Ground truth class indices for each pixel.
+        num_classes (int): Number of valid classes (default: 19).
+        ignore_index (int): Class index to ignore during evaluation (default: 255).
+
+    Returns:
+        float: Mean IoU across all valid classes.
+    
+    This function converts predictions and labels to NumPy arrays and iterates over each class.
+    For each class, it computes the intersection and union of predicted and true pixels.
+    The IoU for a class is defined as the ratio of intersection over union.
+    The final mIoU is the mean of IoUs for all classes present in the evaluation.
+
+    """
     ious = []
     preds = preds.cpu().numpy()
     labels = labels.cpu().numpy()
@@ -51,6 +85,22 @@ def compute_miou(preds, labels, num_classes=19, ignore_index=255):
     return np.mean(ious) if ious else 0.0
 
 def train(epoch, model, train_loader, criterion, optimizer, device):
+    """
+    Runs a single training epoch.
+
+    Args:
+        epoch : Current epoch index (starting from 0).
+        model : The model to be trained.
+        train_loader : DataLoader providing the training data batches.
+        criterion : Loss function used to compute the training loss.
+        optimizer : Optimizer used to update model parameters.
+        device : The device on which computations are performed (CPU or GPU).
+
+    This function iterates over the training DataLoader, performs forward passes,
+    computes the loss, executes backpropagation, updates the model weights,
+    and accumulates accuracy metrics over the epoch.
+
+    """
     model.train()
     running_loss, correct, total = 0.0, 0, 0
     for inputs, targets in train_loader:
@@ -72,6 +122,21 @@ def train(epoch, model, train_loader, criterion, optimizer, device):
     print(f'Train Epoch {epoch+1} - Loss: {running_loss / len(train_loader):.4f} - Acc: {acc:.2f}%')
 
 def validate(model, val_loader, criterion, device, num_classes=19):
+    """
+    Performs model evaluation on the validation dataset.
+
+    Args:
+        model : The model to be evaluated.
+        val_loader : DataLoader providing the validation data batches.
+        criterion : Loss function used to compute the validation loss.
+        device : The device on which computations are performed (CPU or GPU).
+        num_classes : Number of valid classes for evaluation (default: 19).
+
+    This function sets the model to evaluation mode and disables gradient computation.
+    It iterates over the validation DataLoader, computes predictions, loss,
+    and evaluation metrics including accuracy and mean Intersection over Union (mIoU).
+
+    """
     model.eval()
     val_loss, correct, total, miou_total, count = 0, 0, 0, 0, 0
     with torch.no_grad():
@@ -93,6 +158,20 @@ def validate(model, val_loader, criterion, device, num_classes=19):
     return acc, mean_iou
 
 def find_folder(start_path, folder_name):
+    """
+    Searches for a folder within a directory tree and returns its full path.
+
+    Args:
+        start_path : Root directory to start the search.
+        folder_name : Name of the target folder to locate.
+
+    Returns:
+        str or None: The full path to the folder if found, otherwise None.
+
+    This function recursively walks through the directory tree starting at start_path,
+    and returns the full path to the first occurrence of folder_name.
+
+    """
     for root, dirs, _ in os.walk(start_path):
         if folder_name in dirs:
             return os.path.join(root, folder_name)
@@ -131,7 +210,11 @@ if __name__ == "__main__":
 
     base_train_dataset = GTA5.GTA5(train_csv, base_extract_path, transform=None,
                                    target_transform=None, mask_preprocessed_dir=preprocessed_masks_dir)
+    # ----------------------- #
+    #      AUGMENTATIONS      #
+    # ----------------------- #
 
+    # Different types of augmentations
     if tipo == 1:
         train_transform = CombinedAugmentation(base_train_dataset, use_flip=True, use_colorjitter=True, use_scale=True, use_crop=True, use_classmix=True,
                                                use_brightness=False, use_hue=False, use_gamma=False, use_saturation=False, use_contrast=False) # SET B
