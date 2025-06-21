@@ -171,8 +171,14 @@ if __name__ == "__main__":
     GTA5.create_gta5_csv(train_images_dir, train_masks_dir, train_csv, val_csv, base_extract_path)
     result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
     print("Output preprocess_mask.py:\n", result.stdout)
-    if result.stderr:
-        print("Error preprocess_mask.py:\n", result.stderr)
+     result = subprocess.run(['python3', 'preprocess_mask.py'], capture_output=True, text=True)
+    print("Output preprocess_mask.py:\n", result.stdout)
+    if result.returncode != 0:
+        print("Preprocess_mask.py failed:\n", result.stderr)
+    else:
+        print("Preprocess_mask.py ran successfully.")
+
+
     preprocessed_masks_dir = os.path.join(base_extract_path, 'GTA5', 'labels_trainid')
 
     base_train_dataset = GTA5.GTA5(train_csv, base_extract_path, None, None, preprocessed_masks_dir)
@@ -182,9 +188,13 @@ if __name__ == "__main__":
 
     # === Cityscapes (target domain)
     target_csv = 'cityscapes_target.csv'
-    target_root = './Cityscapes/Cityscapes/images'
+    target_root = './Cityscapes/Cityscapes/Cityspaces/images/train' 
     cityscapes.create_csv_no_labels(target_root, target_csv)
-    target_dataset = cityscapes.CityscapesNoLabel(target_csv, transform=val_transform_fn_no_mask)
+    target_dataset = cityscapes.CityscapesNoLabel(
+        annotations_file=target_csv,
+        transform=val_transform_fn_no_mask
+    )
+
 
     # === DataLoader
     bs = 4
