@@ -1,7 +1,0 @@
-da cancellare se tutto va senza
-
-
-in cityscapes viene utilizzato 
-def squeeze_and_long(x):
-    return x.squeeze(0).long()
-sono per il 2b di bisenet classico chiedere a anto
