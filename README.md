@@ -79,4 +79,9 @@ SemSeg_MLDL25/
 ├── evaluationBiseNet.py            # Evaluation script for BiSe
 
 ---
+## Prerequisites
 
+The `fvcore` library is required to the evaluation step. You can install it using pip:
+
+```bash
+!pip install -U fvcore
