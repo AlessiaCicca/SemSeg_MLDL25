@@ -6,28 +6,13 @@ from models.deeplabv2.deeplabv2 import get_deeplab_v2
 import datasets.cityscapes as cityscapes
 from fvcore.nn import FlopCountAnalysis, flop_count_table
 
-id_to_class_name = {
-    0: 'road',
-    1: 'sidewalk',
-    2: 'building',
-    3: 'wall',
-    4: 'fence',
-    5: 'pole',
-    6: 'traffic light',
-    7: 'traffic sign',
-    8: 'vegetation',
-    9: 'terrain',
-    10: 'sky',
-    11: 'person',
-    12: 'rider',
-    13: 'car',
-    14: 'truck',
-    15: 'bus',
-    16: 'train',
-    17: 'motorcycle',
-    18: 'bicycle'
-}
 
+id_to_class_name = {
+    0: 'road', 1: 'sidewalk', 2: 'building', 3: 'wall', 4: 'fence',
+    5: 'pole', 6: 'traffic light', 7: 'traffic sign', 8: 'vegetation',
+    9: 'terrain', 10: 'sky', 11: 'person', 12: 'rider', 13: 'car',
+    14: 'truck', 15: 'bus', 16: 'train', 17: 'motorcycle', 18: 'bicycle'
+}
 
 def calculate_mean_iou_per_class(preds, gts, num_classes=19):
     intersection = np.zeros(num_classes)
@@ -45,32 +30,27 @@ def calculate_mean_iou_per_class(preds, gts, num_classes=19):
             union[cls] += uni
 
     class_iou = intersection / (union + 1e-10)
-    mean_iou = np.nanmean(class_iou)  # skip NaNs if any class never occurs
+    mean_iou = np.nanmean(class_iou)
 
     return mean_iou, class_iou
 
-
-
-def evaluate_model(model, outputs, masks, input_size=(224, 224), iterations=1000, device='cpu'):
-    print("\n=== MODEL EVALUATION ===")
+def evaluate_model(model, val_loader, input_size=(512, 1024), iterations=100, device='cpu'):
     model.eval()
     model.to(device)
 
-    outputs_np = outputs.cpu().detach().numpy()
-    masks_np = masks.cpu().detach().numpy()
+    all_preds = []
+    all_gts = []
 
-    preds = [np.argmax(output, axis=0) for output in outputs_np]
-    gts = [mask[0] for mask in masks_np]
+    with torch.no_grad():
+        for inputs, targets in val_loader:
+            inputs, targets = inputs.to(device), targets.to(device)
+            outputs = model(inputs)
+            preds = torch.argmax(outputs, dim=1).cpu().numpy()
+            gts = targets.squeeze(1).cpu().numpy()
+            all_preds.extend(preds)
+            all_gts.extend(gts)
 
-    mean_iou, class_ious = calculate_mean_iou_per_class(preds, gts, num_classes=19)
-
-    print(f"\nMean IoU (for class average): {mean_iou:.4f}")
-    print("IoU per classe:")
-    for cls_id, iou in enumerate(class_ious):
-        class_name = id_to_class_name.get(cls_id, f"Class {cls_id}")
-        iou_display = f"{iou:.4f}" if not np.isnan(iou) else "N/A"
-        print(f"{class_name:>15}: {iou_display}")
-
+    mean_iou, class_ious = calculate_mean_iou_per_class(all_preds, all_gts, num_classes=19)
 
     # Latenza & FPS
     height, width = input_size
@@ -94,28 +74,37 @@ def evaluate_model(model, outputs, masks, input_size=(224, 224), iterations=1000
     mean_fps = np.mean(fps_list)
     std_fps = np.std(fps_list)
 
-    print(f"Mean Latency: {mean_latency:.2f} ms")
+    # FLOPs
+    image_flop = torch.zeros((1, 3, height, width)).to(device)
+    flops = FlopCountAnalysis(model, image_flop)
+ 
+
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    # Stampa dei risultati
+    print(f"\n=== MODEL EVALUATION RESULTS ===")
+    print(f"Mean IoU (average over classes): {mean_iou:.4f}")
+    print("IoU per classe:")
+    for cls_id, iou in enumerate(class_ious):
+        class_name = id_to_class_name.get(cls_id, f"Class {cls_id}")
+        iou_display = f"{iou:.4f}" if not np.isnan(iou) else "N/A"
+        print(f"{class_name:>15}: {iou_display}")
+
+    print(f"\nMean Latency: {mean_latency:.2f} ms")
     print(f"Std Latency: {std_latency:.2f} ms")
     print(f"Mean FPS: {mean_fps:.2f}")
     print(f"Std FPS: {std_fps:.2f}")
 
-    # FLOPs
-    image_flop = torch.zeros((1, 3, height, width)).to(device)
-    flops = FlopCountAnalysis(model, image_flop)
-    print(flop_count_table(flops))
-
-  
-    total_params = sum(p.numel() for p in model.parameters())
-    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"\nFLOPs tables: {flop_count_table(flops)}")
     print(f"Total parameters: {total_params:,}")
     print(f"Trainable parameters: {trainable_params:,}")
 
+  
 
 if __name__ == "__main__":
-    
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-   
     val_csv = '/content/SemSeg_MLDL25/val_annotations.csv'
     base_path = './Cityscapes/Cityscapes/Cityspaces'
     val_dataset = cityscapes.CityScapes(
@@ -124,16 +113,12 @@ if __name__ == "__main__":
         transform=cityscapes.transform['image'],
         target_transform=cityscapes.transform['mask']
     )
-
     val_loader = DataLoader(val_dataset, batch_size=2, shuffle=False, num_workers=2)
+
     model = get_deeplab_v2(num_classes=19).to(device)
-    model.load_state_dict(torch.load('checkpoints/best_model.pth', map_location=device))
+    model.load_state_dict(torch.load('/content/SemSeg_MLDL25/best_model.pth', map_location=device))
     model.eval()
-    with torch.no_grad():
-        for inputs, targets in val_loader:
-            inputs, targets = inputs.to(device), targets.to(device)
-            outputs = model(inputs)
 
+    
+    evaluate_model(model, val_loader, input_size=(512, 1024), iterations=100, device=device)
 
-   
-    evaluate_model(model, outputs, targets, input_size=(512, 1024), iterations=100, device=device)
