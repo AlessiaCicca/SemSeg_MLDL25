@@ -240,6 +240,12 @@ class CombinedAugmentation:
         target_size = self.crop_size
         image = resize(image, target_size[::-1])
         mask = resize(mask, target_size[::-1], interpolation=InterpolationMode.NEAREST)
+       
+        if image.width < self.crop_size[1] or image.height < self.crop_size[0]:
+            new_w = max(image.width, self.crop_size[1])
+            new_h = max(image.height, self.crop_size[0])
+            image = image.resize((new_w, new_h), Image.BILINEAR)
+            mask = mask.resize((new_w, new_h), Image.NEAREST)
 
         if self.use_classmix and random.random() < 0.5:
             return self.apply_classmix(image, mask)
