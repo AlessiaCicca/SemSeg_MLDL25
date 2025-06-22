@@ -20,7 +20,7 @@ This document is intended to guide users through the repository structure and pr
 - Use `trainDiffAug.py` to train BiSeNet on **GTA5** without augmentation (or with custom augmentation combinations).
 - Augmentations are defined in `augmentation.py`.
 - The script automatically calls `preprocess_mask.py` to generate semantic masks from GTA5 labels.
-- Evaluation can be performed using `trainBisenet.py` with a validation split from **Cityscapes**.
+- Evaluation can be performed using `evaluationBiseNet.py` with a validation split from **Cityscapes**.
 
 ---
 
@@ -31,9 +31,16 @@ This document is intended to guide users through the repository structure and pr
   - `preprocess_mask.py` is used for preparing masks.
   - `focalLoss.py` contains the implementation of **Focal Loss** for rare-class handling.
   - `discriminator.py` implements the **discriminator network** used for adversarial training.
-- Evaluation is done using the standard evaluation script: `trainBisenet.py`.
+- Evaluation is done using the standard evaluation script: `evaluationBiseNet.py`.
 
 ---
+### Pretraining Step
+- Use `trainDomainAdapt.py` for training with **domain adaptation techniques**.
+  - This script includes a part where the model weights trained in pretrain.py are loaded.
+- Use `pretrain.py` to perform the initial 15 epochs of training, including rare-class focused pretraining and masking,
+  the output of this cose must be loaded on `trainDomainAdapt.py`  model.
+- Evaluation is done using the standard evaluation script: `evaluationBiseNet.py`.
+  
 ## Structure
 
 SemSeg_MLDL25/
