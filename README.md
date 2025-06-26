@@ -77,9 +77,17 @@ SemSeg_MLDL25/
 
 ├── trainDeeplab.py                 # Training script for DeepLabV2
 
-├── evaluationDeepLab.py            # Evaluation script for DeepLabV2
+├── evaluationDeepLab.py            # Evaluation script for DeepLabV2│
 
-│
+├── pretrain.py                     # Pretraining - extension
+ 
+├── augmentation.py                
+
+├── focalLoss.py                   # Focal Loss definition - extension
+
+├── preprocess_mask.py   
+
+├── trainDiffAug.py                # 3B) Train with different augmentation
 
 ├── trainBisenet.py                 # Training script for BiSeNet
 
