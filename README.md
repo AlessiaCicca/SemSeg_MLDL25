@@ -77,7 +77,7 @@ SemSeg_MLDL25/
 
 ├── trainDeeplab.py                 # Training script for DeepLabV2
 
-├── evaluationDeepLab.py            # Evaluation script for DeepLabV2│
+├── evaluationDeepLab.py            # Evaluation script for DeepLabV2
 
 ├── pretrain.py                     # Pretraining - extension
  
